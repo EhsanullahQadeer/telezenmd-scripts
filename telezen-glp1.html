@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>telezenMD — Choose Your GLP-1 Medication</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --primary-green: #3d5c2a;
+        --medium-green: #6b8f4e;
+        --sage-green: #a8bc8a;
+        --ink: #1c1c1a;
+        --white: #ffffff;
+        --page-bg: #fdfdfd;
+        --border: #e7e7e4;
+        --muted: rgba(28, 28, 26, 0.62);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
+        font-family:
+          "Poppins",
+          "Quicksand",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #e9e9e6;
+        color: var(--ink);
+      }
+      .phone {
+        max-width: 430px;
+        margin: 0 auto;
+        background: var(--page-bg);
+        min-height: 100vh;
+      }
+
+      /* ---- status bar ---- */
+      .statusbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 26px 2px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .statusbar .icons {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      /* ---- logo ---- */
+      .logo {
+        text-align: center;
+        padding: 2px 0 4px;
+      }
+      .logo .mark {
+        font-size: 32px;
+        font-weight: 400;
+        font-style: italic;
+        color: var(--ink);
+        letter-spacing: -0.5px;
+        font-family: Georgia, "Times New Roman", serif;
+      }
+      .logo .mark b {
+        font-weight: 800;
+      }
+      .logo .mark sup {
+        font-size: 11px;
+        font-weight: 500;
+        font-style: normal;
+        vertical-align: super;
+        letter-spacing: 0;
+      }
+
+      /* ---- headline ---- */
+      .headline {
+        text-align: center;
+        font-size: 28px;
+        line-height: 1.2;
+        font-weight: 700;
+        color: var(--ink);
+        padding: 16px 24px 0;
+        letter-spacing: -0.3px;
+      }
+      .headline .green {
+        color: var(--primary-green);
+      }
+      .subtitle {
+        text-align: center;
+        font-size: 12px;
+        color: #5b6470;
+        padding: 9px 16px 0;
+        line-height: 1.35;
+        font-weight: 400;
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+      }
+
+      /* ---- feature box ---- */
+      .features {
+        position: relative;
+        margin: 10px 18px 0;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        /* background: var(--page-bg); */
+        padding: 6px 0;
+      }
+      .frow {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .fcell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        text-align: center;
+        padding: 12px 3px 11px;
+        gap: 8px;
+      }
+      .ficon {
+        width: 30px;
+        height: 30px;
+        color: var(--primary-green);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ficon svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 0.85;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .flabel {
+        font-size: 9.5px;
+        line-height: 1.4;
+        font-weight: 500;
+        color: var(--ink);
+        white-space: nowrap;
+        letter-spacing: -0.1px;
+      }
+
+      /* inset dividers */
+      .features .vdiv {
+        position: absolute;
+        width: 1px;
+        background: var(--border);
+      }
+      .features .hdiv {
+        position: absolute;
+        height: 1px;
+        background: var(--border);
+        left: 24px;
+        right: 24px;
+        top: 50%;
+      }
+
+      /* ---- medication cards ---- */
+      .cards {
+        padding: 0 18px;
+        margin-top: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .card {
+        position: relative;
+        border: 1.5px solid var(--border);
+        border-radius: 20px;
+        background: var(--white);
+        padding: 24px 22px 26px;
+      }
+      .card.selected {
+        border: 2px solid var(--primary-green);
+      }
+      .badge {
+        position: absolute;
+        top: -15px;
+        left: 24px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--primary-green);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        padding: 8px 16px;
+        border-radius: 22px;
+      }
+      .badge .star {
+        font-size: 12px;
+      }
+      .card-grid {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+      }
+      .card-main {
+        flex: 1;
+        min-width: 0;
+        position: relative;
+      }
+      .drug-name {
+        font-size: 29px;
+        font-weight: 800;
+        color: var(--ink);
+        letter-spacing: -0.5px;
+        line-height: 1;
+      }
+      .starting {
+        font-size: 16px;
+        color: #6b7280;
+        margin-top: 12px;
+      }
+      .price {
+        margin-top: 6px;
+        color: var(--primary-green);
+        font-weight: 800;
+        line-height: 1;
+        display: flex;
+        align-items: flex-start;
+      }
+      .price .dollar {
+        font-size: 26px;
+        margin-top: 6px;
+      }
+      .price .amount {
+        font-size: 50px;
+        letter-spacing: -1px;
+      }
+      .price .star {
+        font-size: 22px;
+        margin-top: 4px;
+        font-weight: 700;
+      }
+      .price .mo {
+        font-size: 22px;
+        font-weight: 500;
+        align-self: flex-end;
+        margin-bottom: 6px;
+      }
+      .price-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 22px 0 18px;
+      }
+      .drug-desc {
+        font-size: 16px;
+        line-height: 1.55;
+        color: #3f4045;
+      }
+      .radio {
+        position: absolute;
+        top: 4px;
+        right: 0;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 2.5px solid var(--primary-green);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .radio::after {
+        content: "";
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--primary-green);
+      }
+      .radio.empty {
+        border: 2px solid #c9cdd3;
+      }
+      .radio.empty::after {
+        display: none;
+      }
+
+      /* vial */
+      .vial {
+        width: 78px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .vcap {
+        width: 42px;
+        height: 16px;
+        background: #f4f4f3;
+        border: 1px solid #dddcd8;
+        border-radius: 7px 7px 3px 3px;
+      }
+      .vcollar {
+        width: 46px;
+        height: 9px;
+        background: linear-gradient(#dcdcda, #bdbdbb, #d4d4d2);
+        border-radius: 2px;
+        margin-top: -1px;
+      }
+      .vbody {
+        width: 64px;
+        height: 150px;
+        background: linear-gradient(
+          105deg,
+          #fbfdfb 0%,
+          #eef3ec 45%,
+          #fbfdfb 60%,
+          #e8eee6 100%
+        );
+        border: 1px solid #dfe4dc;
+        border-radius: 3px 3px 6px 6px;
+        margin-top: 1px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .vbody .vlabel {
+        flex: 1;
+        background: #fff;
+        margin: 34px 5px 0;
+        border-radius: 2px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding-top: 6px;
+        gap: 2px;
+      }
+      .vbrand {
+        font-family: Georgia, serif;
+        font-style: italic;
+        font-size: 10px;
+        color: var(--ink);
+      }
+      .vbrand b {
+        font-weight: 800;
+      }
+      .vbrand sup {
+        font-size: 5px;
+        font-style: normal;
+      }
+      .vname {
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--primary-green);
+      }
+      .vsub {
+        font-size: 6.5px;
+        color: #555;
+        line-height: 1.2;
+      }
+      .vband {
+        margin: 3px 5px 5px;
+        background: var(--primary-green);
+        border-radius: 2px;
+        text-align: center;
+        padding: 2px 0;
+      }
+      .vband span {
+        font-size: 6px;
+        color: #fff;
+        font-weight: 600;
+      }
+
+      /* ---- CTA ---- */
+      .cta-wrap {
+        padding: 26px 18px 0;
+      }
+      .cta-btn {
+        width: 100%;
+        background: var(--ink);
+        color: #fff;
+        border: none;
+        border-radius: 16px;
+        padding: 22px 26px;
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        cursor: pointer;
+        letter-spacing: 0.2px;
+      }
+      .cta-btn .arrow {
+        position: absolute;
+        right: 28px;
+        font-size: 22px;
+      }
+      .price-caption {
+        text-align: center;
+        font-size: 14px;
+        color: #9aa0a6;
+        margin-top: 18px;
+      }
+
+      /* ---- trust ---- */
+      .trust {
+        margin: 18px 18px 28px;
+        background: #f5f6f3;
+        border: 1px solid #e9eae5;
+        border-radius: 14px;
+        padding: 18px 18px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+      }
+      .trust-icon {
+        color: var(--primary-green);
+        flex-shrink: 0;
+        width: 30px;
+        height: 34px;
+      }
+      .trust-text strong {
+        display: block;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.35;
+      }
+      .trust-text span {
+        font-size: 14px;
+        color: #8b9096;
+        line-height: 1.45;
+      }
+
+      /* ---- continue button rows reuse ---- */
+    </style>
+  </head>
+  <body>
+    <div class="phone">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icons">
+          <svg width="18" height="12" viewBox="0 0 18 12">
+            <rect x="0" y="7" width="3" height="5" rx="1" fill="#1C1C1A" />
+            <rect x="5" y="4" width="3" height="8" rx="1" fill="#1C1C1A" />
+            <rect x="10" y="2" width="3" height="10" rx="1" fill="#1C1C1A" />
+            <rect x="15" y="0" width="3" height="12" rx="1" fill="#1C1C1A" />
+          </svg>
+          <svg width="18" height="13" viewBox="0 0 18 13" fill="none">
+            <path
+              d="M9 11.5l.01 0M2 5.5a10 10 0 0114 0M4.6 8.1a6 6 0 018.8 0"
+              stroke="#1C1C1A"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg width="26" height="13" viewBox="0 0 26 13">
+            <rect
+              x="0.5"
+              y="0.5"
+              width="22"
+              height="12"
+              rx="3"
+              fill="none"
+              stroke="#1C1C1A"
+              stroke-opacity="0.4"
+            />
+            <rect x="2" y="2" width="18" height="9" rx="1.5" fill="#1C1C1A" />
+            <rect
+              x="23.5"
+              y="4"
+              width="2"
+              height="5"
+              rx="1"
+              fill="#1C1C1A"
+              fill-opacity="0.4"
+            />
+          </svg>
+        </span>
+      </div>
+
+      <div class="logo">
+        <span class="mark">tele<b>zen</b><sup>MD</sup></span>
+      </div>
+
+      <div class="headline">
+        Choose Your<br /><span class="green">GLP-1</span> Medication
+      </div>
+      <div class="subtitle">
+        Both are clinically proven. Here's how most patients choose.
+      </div>
+
+      <!-- FEATURE BOX -->
+      <div class="features">
+        <div class="frow">
+          <div class="fcell">
+            <div class="ficon">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="6.2" r="3.3" />
+                <path
+                  d="M5.5 21C5.5 15 6.8 12 9.2 11.3L12 12.7L14.8 11.3C17.2 12 18.5 15 18.5 21Z"
+                />
+                <path d="M11.2 13.6C9.6 15 9.5 17 9.5 18.3" />
+                <path d="M12.8 13.6C14.4 15 14.5 17 14.5 18.3" />
+                <circle cx="9.5" cy="19.3" r="1.0" />
+                <circle cx="14.5" cy="19.3" r="1.0" />
+              </svg>
+            </div>
+            <div class="flabel">Physician-Guided<br />Care</div>
+          </div>
+          <div class="fcell">
+            <div class="ficon">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 17.5Q10.8 9 18.6 5Q20.2 13 12 17.5Z" />
+                <path d="M12 17.5Q13.2 10 5.4 6.5Q3.9 13.5 12 17.5Z" />
+                <path d="M12 17.5L17.6 6.6" />
+                <path d="M12 17.5L6.6 8.3" />
+                <path d="M12 17.5V21.4" />
+              </svg>
+            </div>
+            <div class="flabel">Lose It For Life®<br />Program</div>
+          </div>
+          <div class="fcell">
+            <div class="ficon">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 13.6Q11.4 9.4 15.9 7Q17.2 11 12 13.6Z" />
+                <path d="M12 13.6Q12.6 9.8 8.1 7.4Q6.8 11.2 12 13.6Z" />
+                <path d="M12 13.6V10" />
+                <path
+                  d="M3.8 13.9H20.2C19.5 18.6 16.4 21 12 21C7.6 21 4.5 18.6 3.8 13.9Z"
+                />
+                <path d="M9.9 20.8l0.7 1.1h2.8l0.7-1.1" />
+              </svg>
+            </div>
+            <div class="flabel">GLP-1 Nutrition<br />Protocol™</div>
+          </div>
+        </div>
+
+        <div class="frow">
+          <div class="fcell">
+            <div class="ficon">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 14v-3a8 8 0 1 1 16 0v3" />
+                <path
+                  d="M4.2 14a1.8 1.8 0 0 1 1.8-1.8h0.8a1.8 1.8 0 0 1 1.8 1.8v3a1.8 1.8 0 0 1-1.8 1.8H6a1.8 1.8 0 0 1-1.8-1.8z"
+                />
+                <path
+                  d="M15.4 14a1.8 1.8 0 0 1 1.8-1.8h0.8a1.8 1.8 0 0 1 1.8 1.8v3a1.8 1.8 0 0 1-1.8 1.8h-0.8a1.8 1.8 0 0 1-1.8-1.8z"
+                />
+                <path d="M6 18.8v1.1a2.6 2.6 0 0 0 2.6 2.6H10" />
+                <circle cx="11" cy="22.5" r="0.95" />
+              </svg>
+            </div>
+            <div class="flabel">Concierge<br />Support</div>
+          </div>
+          <div class="fcell">
+            <div class="ficon">
+              <svg viewBox="0 0 24 24">
+                <path d="M5 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                <path d="M15 17a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+                <path
+                  d="M5 17h-2v-11a1 1 0 0 1 1 -1h9v12m-4 0h6m4 0h2v-6h-8m0 -5h5l3 5"
+                />
+              </svg>
+            </div>
+            <div class="flabel">Free<br />Shipping</div>
+          </div>
+          <div class="fcell">
+            <div class="ficon">
+              <svg viewBox="0 0 24 24">
+                <path d="M17 3l4 4" />
+                <path d="M19 5l-4.5 4.5" />
+                <path d="M11.5 6.5l6 6" />
+                <path d="M16.5 11.5l-6.5 6.5h-4v-4l6.5 -6.5" />
+                <path d="M7.5 12.5l1.5 1.5" />
+                <path d="M10.5 9.5l1.5 1.5" />
+                <path d="M3 21l3 -3" />
+              </svg>
+            </div>
+            <div class="flabel">Injection Supplies<br />Included</div>
+          </div>
+        </div>
+
+        <div class="hdiv"></div>
+        <div class="vdiv" style="left: 33.33%; top: 11%; height: 31%"></div>
+        <div class="vdiv" style="left: 66.66%; top: 11%; height: 31%"></div>
+        <div class="vdiv" style="left: 33.33%; top: 58%; height: 31%"></div>
+        <div class="vdiv" style="left: 66.66%; top: 58%; height: 31%"></div>
+      </div>
+
+      <!-- CARDS -->
+      <div class="cards">
+        <!-- Tirzepatide -->
+        <div class="card selected">
+          <div class="badge"><span class="star">★</span>MOST POPULAR</div>
+          <div class="card-grid">
+            <div class="vial">
+              <div class="vcap"></div>
+              <div class="vcollar"></div>
+              <div class="vbody">
+                <div class="vlabel">
+                  <div class="vbrand">tele<b>zen</b><sup>MD</sup></div>
+                  <div class="vname">Tirzepatide</div>
+                  <div class="vsub">Injection</div>
+                  <div class="vsub">RX Only</div>
+                </div>
+                <div class="vband"><span>RX Only</span></div>
+              </div>
+            </div>
+            <div class="card-main">
+              <div class="radio"></div>
+              <div class="drug-name">Tirzepatide</div>
+              <div class="starting">Starting at</div>
+              <div class="price">
+                <span class="dollar">$</span><span class="amount">199</span
+                ><span class="star">*</span><span class="mo">/mo</span>
+              </div>
+              <div class="price-divider"></div>
+              <div class="drug-desc">
+                The newest and most powerful GLP-1. Patients typically lose 20%
+                or more of body weight. Most patients choose this.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Semaglutide -->
+        <div class="card">
+          <div class="card-grid">
+            <div class="vial">
+              <div class="vcap"></div>
+              <div class="vcollar"></div>
+              <div class="vbody">
+                <div class="vlabel">
+                  <div class="vbrand">tele<b>zen</b><sup>MD</sup></div>
+                  <div class="vname">Semaglutide</div>
+                  <div class="vsub">Injection</div>
+                  <div class="vsub">RX Only</div>
+                </div>
+                <div class="vband"><span>RX Only</span></div>
+              </div>
+            </div>
+            <div class="card-main">
+              <div class="radio empty"></div>
+              <div class="drug-name">Semaglutide</div>
+              <div class="starting">Starting at</div>
+              <div class="price">
+                <span class="dollar">$</span><span class="amount">129</span
+                ><span class="star">*</span><span class="mo">/mo</span>
+              </div>
+              <div class="price-divider"></div>
+              <div class="drug-desc">
+                The original GLP-1 — clinically proven with millions of patients
+                worldwide. A strong option for those who prefer to start with
+                the original GLP-1.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-wrap">
+        <button class="cta-btn">
+          Continue to Plan Selection<span class="arrow">→</span>
+        </button>
+        <div class="price-caption">* Based on annual plan pricing.</div>
+      </div>
+
+      <!-- TRUST -->
+      <div class="trust">
+        <svg
+          class="trust-icon"
+          viewBox="0 0 30 34"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M15 2l11 4v9c0 7.5-4.7 13.2-11 15.5C8.7 28.2 4 22.5 4 15V6z"
+          />
+          <path d="M10 16.5l3.5 3.5L20.5 13" />
+        </svg>
+        <div class="trust-text">
+          <strong
+            >Your treatment plan will be reviewed by a licensed
+            physician.</strong
+          >
+          <span
+            >If approved, your medication will be shipped discreetly to your
+            door.</span
+          >
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
