@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medication Cards</title>
+<style>
+/* ============================================================
+   MEDICATION CARDS*/
+.med-list, .med-list *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+
+.med-list{
+  width:100%;
+  margin:0;
+  padding:0;
+  background:transparent;       /* inherits your container's background */
+}
+
+/* ---- card shell ---- */
+.med-card{
+  position:relative;
+  background:#FFFFFF;
+  border:2px solid #E7E7E4;
+  border-radius:15px;
+  padding:15px 17px;
+  margin-bottom:15px;
+  cursor:pointer;
+  transition:border-color .15s ease;
+}
+.med-card:last-child{margin-bottom:0;}
+.med-card.selected{border-color:#3D5C2A;}
+.med-card.has-badge{padding-top:44px;}        /* room for the badge */
+
+/* ---- MOST POPULAR badge: inside card, top-left, under the border ---- */
+.med-badge{
+  position:absolute;
+  top:6px;
+  left:11px;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  background:#3D5C2A;
+  color:#FFFFFF;
+  font-size:10.5px;
+  font-weight:600;
+  letter-spacing:.3px;
+  padding:6px 11px;
+  border-radius:999px;
+  white-space:nowrap;
+  line-height:1;
+}
+.med-badge svg{width:9px;height:9px;display:block;flex:none;}
+
+/* ---- radio (top-right) ---- */
+.med-radio{
+  position:absolute;
+  right:16px;
+  top:39px;
+  width:23px;
+  height:23px;
+  border-radius:50%;
+  border:1.5px solid #A8AAAE;
+  transition:border-color .15s ease;
+}
+.med-card.has-badge .med-radio{top:58px;}     /* pushed down by the badge */
+.med-radio::after{
+  content:'';position:absolute;inset:4px;border-radius:50%;
+  background:transparent;transition:background .15s ease;
+}
+.med-card.selected .med-radio{border-color:#3D5C2A;}
+.med-card.selected .med-radio::after{background:#3D5C2A;}
+
+/* ---- body: image + content ---- */
+.med-body{display:flex;gap:30px;align-items:stretch;}
+
+.med-image{
+  flex:none;width:58px;min-height:118px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.med-image img{width:100%;height:100%;object-fit:contain;display:block;}
+.med-image .ph{
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  text-align:center;font-size:9px;font-weight:500;color:#A7ADA0;line-height:1.4;
+  border:1px dashed #D6DACE;border-radius:8px;background:#FAFBF8;
+}
+
+/* ---- content ---- */
+.med-content{flex:1;min-width:0;padding-right:6px;}
+.med-name{font-size:16px;font-weight:700;color:#1C1C1A;letter-spacing:-.3px;line-height:1.1;}
+.med-starting{font-size:11.5px;font-weight:500;color:#5B6470;margin-top:6px;}
+.med-price{display:flex;align-items:flex-end;color:#3D5C2A;font-weight:700;margin-top:2px;line-height:1;}
+.med-price .cur{font-size:19px;align-self:flex-start;margin-top:4px;margin-right:1px;}
+.med-price .amt{font-size:30px;letter-spacing:-.8px;}
+.med-price .star{font-size:14px;align-self:flex-start;margin-top:2px;font-weight:600;}
+.med-price .per{font-size:14px;font-weight:600;margin-left:2px;padding-bottom:4px;}
+
+.med-divider{height:1px;background:#E7E7E4;margin:11px 0;}
+
+.med-desc{font-size:11px;line-height:1.5;color:#3F4045;font-weight:400;padding-right:26px;}
+
+@media (max-width:430px){
+  .med-content{padding-right:4px;}
+  .med-desc{padding-right:24px;}
+}
+</style>
+</head>
+<body style="margin:0;background:#FDFDFD;">
+
+<div id="med-cards" class="med-list"></div>
+
+<script>
+/* 1) DATA ----------------------------------------------------- */
+const medications = [
+  {
+    id:'tirzepatide', name:'Tirzepatide', price:'199',
+    badge:'MOST POPULAR',           // '' / null = no badge
+    image:'',                        // <-- vial image URL here
+    description:'The newest and most powerful GLP-1. Patients typically lose 20% or more of body weight. Most patients choose this.',
+    selected:true
+  },
+  {
+    id:'semaglutide', name:'Semaglutide', price:'129',
+    badge:'',
+    image:'',                        // <-- vial image URL here
+    description:'The original GLP-1 — clinically proven with millions of patients worldwide. A strong option for those who prefer to start with the original GLP-1.',
+    selected:false
+  }
+];
+
+const STAR='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.4 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>';
+
+/* 2) TEMPLATE ------------------------------------------------- */
+function cardHTML(med){
+  const img = med.image
+    ? `<img src="${med.image}" alt="${med.name}">`
+    : `<span class="ph">Vial image<br>here</span>`;
+  return `
+    <div class="med-card ${med.badge?'has-badge':''} ${med.selected?'selected':''}"
+         data-id="${med.id}" role="radio" aria-checked="${med.selected}" tabindex="0">
+      ${med.badge ? `<div class="med-badge">${STAR}${med.badge}</div>` : ''}
+      <div class="med-radio"></div>
+      <div class="med-body">
+        <div class="med-image">${img}</div>
+        <div class="med-content">
+          <h3 class="med-name">${med.name}</h3>
+          <div class="med-starting">Starting at</div>
+          <div class="med-price">
+            <span class="cur">$</span><span class="amt">${med.price}</span><span class="star">*</span><span class="per">/mo</span>
+          </div>
+          <div class="med-divider"></div>
+          <p class="med-desc">${med.description}</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* 3) RENDER (map -> innerHTML) -------------------------------- */
+const container=document.getElementById('med-cards');
+function render(){ container.innerHTML = medications.map(cardHTML).join(''); }
+
+/* 4) SELECTION ------------------------------------------------ */
+function selectCard(id){
+  medications.forEach(m => m.selected = (m.id===id));
+  container.querySelectorAll('.med-card').forEach(card=>{
+    const on = card.dataset.id===id;
+    card.classList.toggle('selected', on);
+    card.setAttribute('aria-checked', on);
+  });
+  onSelectionChange(id);
+}
+function onSelectionChange(id){
+  console.log('Selected medication:', id);
+  // hook into Bask answer state here, e.g. setAnswer(id)
+}
+container.addEventListener('click', e=>{
+  const c=e.target.closest('.med-card'); if(c) selectCard(c.dataset.id);
+});
+container.addEventListener('keydown', e=>{
+  if(e.key===' '||e.key==='Enter'){ const c=e.target.closest('.med-card'); if(c){e.preventDefault();selectCard(c.dataset.id);} }
+});
+render();
+</script>
+</body>
+</html>
