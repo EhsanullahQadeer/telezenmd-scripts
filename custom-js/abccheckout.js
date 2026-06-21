@@ -153,6 +153,10 @@ function getPlans(cards) {
       billed: getBilled(getPrice(cards[0]), 3),
       save: getSavings(monthlyPrice, getPrice(cards[0])),
       selected: isSelected(cards[0]),
+      highlights: [
+        { text: "Most Popular", check: true },
+        { text: "Best Balance of<br>Savings & Flexibility", check: true },
+      ],
     },
     {
       id: "sixmonth",
@@ -160,10 +164,11 @@ function getPlans(cards) {
       price: getPrice(cards[1]),
       badge: "POPULAR UPGRADE",
       badgeStyle: "green",
-      check: true,
+      check: false,
       billed: getBilled(getPrice(cards[1]), 6),
       save: getSavings(monthlyPrice, getPrice(cards[1])),
       selected: isSelected(cards[1]),
+      highlights: [{ text: "Popular Upgrade", check: false, green: true }],
     },
     {
       id: "twelvemonth",
@@ -171,10 +176,11 @@ function getPlans(cards) {
       price: getPrice(cards[2]),
       badge: "BEST VALUE",
       badgeStyle: "green",
-      check: true,
+      check: false,
       billed: getBilled(getPrice(cards[2]), 12),
       save: getSavings(monthlyPrice, getPrice(cards[2])),
       selected: isSelected(cards[2]),
+      highlights: [{ text: "Lowest Monthly Cost", check: false, green: true }],
     },
     {
       id: "monthly",
@@ -184,11 +190,10 @@ function getPlans(cards) {
       badgeStyle: "gray",
       check: false,
       billed: "Billed monthly, cancel anytime",
-      notes: [
-        "Most patients upgrade after their first month.",
-        "Medication pricing may vary month to month.",
-      ],
       selected: isSelected(cards[3]),
+      highlights: [
+        { text: "Most patients upgrade<br>after their first month.", check: false },
+      ],
     },
   ];
 }
@@ -201,11 +206,15 @@ function planHTML(p) {
   const notes = (p.notes || [])
     .map((n) => `<div class="prog-plan-note">${n}</div>`)
     .join("");
+  const hlItems = (p.highlights || [])
+    .map((h) => `<div class="prog-plan-hl">${h.check ? `<svg class="prog-plan-hl-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>` : ""}<span class="prog-plan-hl-text${(h.check || h.green) ? " prog-hl-green" : ""}">${h.text}</span></div>`)
+    .join("");
+  const highlightsHTML = hlItems ? `<div class="prog-plan-highlights">${hlItems}</div>` : "";
   return `<div class="prog-plan-card ${p.selected ? "prog-selected" : ""}" data-id="${p.id}" role="radio" aria-checked="${p.selected}" tabindex="0">
     ${badge}<div class="prog-plan-row"><span class="prog-plan-radio"></span>
     <div class="prog-plan-content flex flex-col gap-1">${name}
     <div class="prog-plan-price"><span class="prog-amt">$${p.price}</span><span class="prog-per">/mo</span></div>
-    <div class="prog-plan-billed">${p.billed}</div>${save}${notes}</div></div></div>`;
+    <div class="prog-plan-billed">${p.billed}</div>${save}${notes}</div>${highlightsHTML}</div></div>`;
 }
 
 // ─── MOUNT ────────────────────────────────────────────────────────────────────
@@ -262,23 +271,28 @@ function mountCheckoutUI() {
 .prog-plans { padding: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .prog-plan-card { position: relative; background: #fff; border: 1px solid var(--bd); border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
 .prog-plan-card.prog-selected { border-color: var(--prog-green); background: #FBFCF8; }
-.prog-plan-badge { display: inline-flex; align-items: center; gap: 3px; margin-left: 20px; margin-bottom: 3px; font-size: 6.5px; font-weight: 700; letter-spacing: .3px; line-height: 1; padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.prog-plan-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 20px; margin-bottom: 4px; font-size: 9px; font-weight: 700; letter-spacing: .3px; line-height: 1; padding: 4px 8px; border-radius: 5px; white-space: nowrap; }
 .prog-plan-badge.prog-green { background: var(--prog-green); color: #fff; }
 .prog-plan-badge.prog-gray { background: #EDEDEA; color: #4A4D52; font-weight: 600; }
-.prog-plan-badge svg { width: 7px; height: 7px; }
+.prog-plan-badge svg { width: 10px; height: 10px; }
 .prog-plan-row { display: flex; gap: 7px; align-items: flex-start; }
 .prog-plan-radio { position: relative; flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--prog-radio-off); transition: border-color .15s ease; }
 .prog-plan-radio::after { content: ''; position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); transition: background .15s ease; }
 .prog-plan-card.prog-selected .prog-plan-radio { border-color: var(--prog-green); }
 .prog-plan-card.prog-selected .prog-plan-radio::after { background: var(--prog-green); }
 .prog-plan-content { flex: 1; min-width: 0; }
-.prog-plan-name { font-size: 11px; font-weight: 700; color: var(--prog-ink); line-height: 1.05; }
-.prog-plan-price { display: flex; align-items: flex-end; margin-top: 1px; line-height: 1; }
-.prog-plan-price .prog-amt { font-size: 15px; font-weight: 700; color: var(--prog-ink); letter-spacing: -.3px; }
-.prog-plan-price .prog-per { font-size: 8px; font-weight: 500; color: var(--prog-muted); margin-left: 3px; padding-bottom: 2px; }
-.prog-plan-billed { font-size: 9px; font-weight: 500; color: var(--prog-muted); margin-top: 3px; line-height: 1.2; }
-.prog-plan-save { font-size: 9px; font-weight: 600; color: var(--prog-green-save); margin-top: 2px; line-height: 1.2; }
-.prog-plan-note { font-size: 9px; font-weight: 500; color: var(--prog-muted); margin-top: 2px; line-height: 1.2; }
+.prog-plan-name { font-size: 13px; font-weight: 700; color: var(--prog-ink); line-height: 1.05; }
+.prog-plan-price { display: flex; align-items: flex-end; margin-top: 2px; line-height: 1; }
+.prog-plan-price .prog-amt { font-size: 19px; font-weight: 700; color: var(--prog-ink); letter-spacing: -.3px; }
+.prog-plan-price .prog-per { font-size: 10px; font-weight: 500; color: var(--prog-muted); margin-left: 3px; padding-bottom: 2px; }
+.prog-plan-billed { font-size: 11px; font-weight: 500; color: var(--prog-muted); margin-top: 3px; line-height: 1.2; }
+.prog-plan-save { font-size: 11px; font-weight: 600; color: var(--prog-green-save); margin-top: 2px; line-height: 1.2; }
+.prog-plan-note { font-size: 10px; font-weight: 500; color: var(--prog-muted); margin-top: 2px; line-height: 1.2; }
+.prog-plan-highlights { display: flex; flex-direction: column; gap: 5px; justify-content: center; width: 36%; flex-shrink: 0; }
+.prog-plan-hl { display: flex; align-items: flex-start; gap: 4px; }
+.prog-plan-hl-check { flex: none; width: 13px; height: 13px; color: var(--prog-green); margin-top: 1px; }
+.prog-plan-hl-text { font-size: 10px; font-weight: 600; color: var(--prog-muted); line-height: 1.3; }
+.prog-plan-hl-text.prog-hl-green { color: var(--prog-green); font-weight: 700; }
 .prog-trust { margin: 11px 0 0; display: flex; align-items: center; gap: 9px; background: #EEF2EC; border: 1px solid #E0E8D8; border-radius: 10px; padding: 9px 12px; }
 .prog-trust svg { width: 19px; height: 19px; color: var(--prog-green); flex: none; }
 .prog-trust .prog-t1 { font-size: 9.5px; font-weight: 700; color: var(--prog-green); line-height: 1.3; }
@@ -294,8 +308,8 @@ function mountCheckoutUI() {
 
 .prog-payment-loading { font-size: 11px; color: var(--prog-muted); text-align: center; padding: 20px 0; }
 /* ── Submit button ── */
-.prog-submit-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--prog-green); color: #fff; border: none; border-radius: 12px; padding: 16px 24px; margin-top: 11px; margin-bottom: 16px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: .1px; cursor: pointer; transition: background .15s ease; -webkit-font-smoothing: antialiased; }
-.prog-submit-btn:hover { background: var(--ink); }
+.prog-submit-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 16px 24px; margin-top: 11px; margin-bottom: 16px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: .1px; cursor: pointer; transition: background .15s ease; -webkit-font-smoothing: antialiased; }
+.prog-submit-btn:hover { background: #3a3a38; }
 .prog-submit-btn:active { transform: translateY(1px); }
 .prog-submit-btn:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -319,21 +333,22 @@ function mountCheckoutUI() {
 .co-payment-hdr-r {letter-spacing: -0.2px; font-size: 11px; font-weight: 500; color: #6B6C82; }
 
 .prog-fsa-row { margin: 14px 0 0; display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
-.prog-fsa-box, .prog-pay-box { background: #F7F8F6; border: 1px solid var(--bd); border-radius: 12px; padding: 12px; }
+@media (max-width: 380px) { .prog-fsa-row { grid-template-columns: 1fr; } }
+.prog-fsa-box, .prog-pay-box { background: #F7F8F6; border: 1px solid var(--bd); border-radius: 12px; padding: 12px; min-width: 0; }
 .prog-fsa-box { display: flex; align-items: flex-start; gap: 12px; }
 .prog-fsa-icon { flex: none; padding-top: 2px; }
 .prog-fsa-icon svg { width: 26px; height: 26px; color: var(--prog-green); }
 .prog-fsa-lbl { font-size: 12px; font-weight: 700; color: var(--prog-green); line-height: 1.2; }
 .prog-fsa-sub { font-size: 12px; font-weight: 500; color: var(--prog-muted); margin-top: 4px; line-height: 1.5; }
-.prog-pay-lbl { font-size: 12px; font-weight: 700; color: var(--prog-green); margin-bottom: 12px; }
-.prog-pay-logos { display: flex; align-items: center; gap: 16px; margin-bottom: 11px; }
-.prog-pay-logos span { white-space: nowrap; color: #1A1A1A; }
-.prog-klarna { font-size: 16px; font-weight: 800; }
-.prog-affirm { font-size: 16px; font-weight: 700; }
-.prog-afterpay { font-size: 15px; font-weight: 800; }
+.prog-pay-lbl { font-size: 12px; font-weight: 700; color: var(--prog-green); margin-bottom: 8px; }
+.prog-pay-logos { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.prog-pay-logos span { color: #1A1A1A; }
+.prog-klarna { font-size: 14px; font-weight: 800; }
+.prog-affirm { font-size: 14px; font-weight: 700; }
+.prog-afterpay { font-size: 13px; font-weight: 800; }
 .prog-pay-sub { font-size: 12px; font-weight: 500; color: var(--prog-ink); line-height: 1.6; }
-.prog-checkout .features-parent {border: 1px solid var(--bd); border-radius: 18px; margin: 15px 0 0; padding: 6px 0; }
-.prog-checkout .prog-inc-title { font-size: 11px; font-weight: 700; color: var(--prog-green-save); line-height: 1.3; margin-left: 12px; margin-bottom:-10px; }
+.prog-checkout .features-parent {border: 1px solid var(--bd); border-radius: 18px; margin: 0; padding: 6px 0; }
+.prog-checkout .prog-inc-title { font-size: 18.5px; font-weight: 700; color: var(--prog-ink); line-height: 1.3; margin-top: 20px; margin-bottom: 8px; }
 .prog-checkout .features { position: relative;   }
 .prog-checkout .frow { display: grid; grid-template-columns: repeat(3, 1fr); }
 .prog-checkout .fcell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; padding: 12px 3px 11px; gap: 8px; }
@@ -345,6 +360,13 @@ function mountCheckoutUI() {
 .prog-checkout .features .hdiv-1 { left: 24px; width: calc(33.33% - 42px); }
 .prog-checkout .features .hdiv-2 { left: calc(33.33% + 18px); width: calc(33.33% - 36px); }
 .prog-checkout .features .hdiv-3 { left: calc(66.66% + 18px); right: 24px; }
+.co-urgency { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9px; font-weight: 600; color: var(--prog-green); margin-top: 6px; line-height: 1.4; text-align: center; }
+.co-urgency svg { flex: none; width: 15px; height: 15px; color: var(--prog-green); }
+.co-badges { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-bottom: 4px; }
+.co-badge { display: flex; flex-direction: row; align-items: center; gap: 3px; flex: 1; justify-content: center; padding: 0 2px; }
+.co-badge svg { width: 24px; height: 24px; color: var(--prog-green); flex: none; }
+.co-badge span { font-size: 8px; font-weight: 700; color: var(--prog-ink); text-align: left; line-height: 1.3; }
+.co-badge-div { width: 1px; height: 36px; background: var(--bd); flex: none; }
 </style>
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
@@ -352,8 +374,8 @@ function mountCheckoutUI() {
     <p class="prog-review">Reviewed and prescribed by a licensed U.S. physician<br>before treatment begins.</p>
     <p class="prog-stat">Patients lose an average of 15–20%* of body weight<br>in their first year.</p>
   </div>
-   <div class="features-parent">
   <div class="prog-inc-title text-center">Every Plan Includes:</div>
+  <div class="features-parent">
     <div class="features">
     <div class="frow">
       <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646704/physicianguidedcare_uwuuub.png" alt="Physician" /></div><div class="flabel">Physician-Guided<br />Care</div></div>
@@ -422,11 +444,36 @@ function mountCheckoutUI() {
       <div class="prog-payment-loading">Loading secure payment form…</div>
     </div>
   </div>
-  <div   style="margin-top: 8px;"class="sticky bottom-0 z-50 bg-white  px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+  <div style="margin-top: 8px;" class="sticky bottom-0 z-50 bg-white px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
   <button id="tzmd-submit-btn" class="prog-submit-btn" type="button">
     <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>
     Start My Treatment Plan
   </button>
+  <div class="co-urgency">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Physician slots are limited — applications reviewed in the order received.
+  </div>
+  <div class="co-badges">
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Licensed<br>U.S. Physicians</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><line x1="12" y1="15" x2="12" y2="17"/></svg>
+      <span>HIPAA<br>Compliant</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>No Commitment<br>Until Approval</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="Delivery_Truck"><g><path d="M21.47,11.185l-1.03-1.43a2.5,2.5,0,0,0-2.03-1.05H14.03V6.565a2.5,2.5,0,0,0-2.5-2.5H4.56a2.507,2.507,0,0,0-2.5,2.5v9.94a1.5,1.5,0,0,0,1.5,1.5H4.78a2.242,2.242,0,0,0,4.44,0h5.56a2.242,2.242,0,0,0,4.44,0h1.22a1.5,1.5,0,0,0,1.5-1.5v-3.87A2.508,2.508,0,0,0,21.47,11.185ZM7,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,7,18.935Zm6.03-1.93H9.15a2.257,2.257,0,0,0-4.3,0H3.56a.5.5,0,0,1-.5-.5V6.565a1.5,1.5,0,0,1,1.5-1.5h6.97a1.5,1.5,0,0,1,1.5,1.5ZM17,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,17,18.935Zm3.94-2.43a.5.5,0,0,1-.5.5H19.15a2.257,2.257,0,0,0-4.3,0h-.82v-7.3h4.38a1.516,1.516,0,0,1,1.22.63l1.03,1.43a1.527,1.527,0,0,1,.28.87Z"></path><path d="M18.029,12.205h-2a.5.5,0,0,1,0-1h2a.5.5,0,0,1,0,1Z"></path></g></g></svg>
+      <span>Fast &amp; Discreet<br>Shipping</span>
+    </div>
+  </div>
   </div>
 </div>`;
 
