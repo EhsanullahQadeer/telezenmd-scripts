@@ -87,12 +87,14 @@ function getSavings(monthlyPrice, discountedPrice) {
   return `Save $${formatCurrency(savings)}/year vs monthly`;
 }
 function getPlans(cards) {
-  const monthlyPrice = getPrice(cards[0]);
+  // Bask card order from DOM: [0]=Quarterly, [1]=Six months, [2]=Yearly, [3]=Monthly
+  // Monthly is the baseline for savings calculations.
+  const monthlyPrice = getPrice(cards[3]);
   return [
-    { id: "quarterly", name: "Quarterly Program", price: getPrice(cards[1]), badge: "RECOMMENDED", badgeStyle: "green", check: true, billed: getBilled(getPrice(cards[1]), 3), save: getSavings(monthlyPrice, getPrice(cards[1])), selected: isSelected(cards[1]) },
-    { id: "sixmonth", name: "6 Month Program", price: getPrice(cards[2]), badge: "POPULAR UPGRADE", badgeStyle: "green", check: true, billed: getBilled(getPrice(cards[2]), 6), save: getSavings(monthlyPrice, getPrice(cards[2])), selected: isSelected(cards[2]) },
-    { id: "twelvemonth", name: "12 Month Program", price: getPrice(cards[3]), badge: "BEST VALUE", badgeStyle: "green", check: true, billed: getBilled(getPrice(cards[3]), 12), save: getSavings(monthlyPrice, getPrice(cards[3])), selected: isSelected(cards[3]) },
-    { id: "monthly", name: "", price: monthlyPrice, badge: "Starter Monthly", badgeStyle: "gray", check: false, billed: "Billed monthly, cancel anytime", notes: ["Most patients upgrade after their first month.", "Medication pricing may vary month to month."], selected: isSelected(cards[0]) },
+    { id: "quarterly",   name: "Quarterly Program",  price: getPrice(cards[0]), badge: "RECOMMENDED",   badgeStyle: "green", check: true,  billed: getBilled(getPrice(cards[0]), 3),  save: getSavings(monthlyPrice, getPrice(cards[0])), selected: isSelected(cards[0]) },
+    { id: "sixmonth",    name: "6 Month Program",     price: getPrice(cards[1]), badge: "POPULAR UPGRADE", badgeStyle: "green", check: true,  billed: getBilled(getPrice(cards[1]), 6),  save: getSavings(monthlyPrice, getPrice(cards[1])), selected: isSelected(cards[1]) },
+    { id: "twelvemonth", name: "12 Month Program",    price: getPrice(cards[2]), badge: "BEST VALUE",    badgeStyle: "green", check: true,  billed: getBilled(getPrice(cards[2]), 12), save: getSavings(monthlyPrice, getPrice(cards[2])), selected: isSelected(cards[2]) },
+    { id: "monthly",     name: "",                    price: monthlyPrice,       badge: "Starter Monthly", badgeStyle: "gray",  check: false, billed: "Billed monthly, cancel anytime",  notes: ["Most patients upgrade after their first month.", "Medication pricing may vary month to month."], selected: isSelected(cards[3]) },
   ];
 }
 function planHTML(p) {
@@ -205,10 +207,13 @@ function mountCheckoutUI() {
     addObserver(plansObserver);
   }
 
-  const indexMap = { monthly: 0, quarterly: 1, sixmonth: 2, twelvemonth: 3 };
+  // Bask card order: [0]=Quarterly, [1]=Six months, [2]=Yearly, [3]=Monthly
+  const indexMap = { quarterly: 0, sixmonth: 1, twelvemonth: 2, monthly: 3 };
+  const idByIndex = ["quarterly", "sixmonth", "twelvemonth", "monthly"];
 
   function selectPlan(id) {
     if (!isMounted) return;
+    console.log("[CO] selectPlan:", id, "→ domCards[" + indexMap[id] + "]");
     plans.forEach(p => (p.selected = p.id === id));
     wrap.querySelectorAll(".prog-plan-card").forEach(c => {
       const on = c.dataset.id === id;
@@ -217,7 +222,24 @@ function mountCheckoutUI() {
     });
     const domCard = domCards[indexMap[id]];
     if (domCard) domCard.click();
+    else console.warn("[CO] domCard not found for id:", id);
   }
+
+  // Sync Bask→custom: when Bask toggles border-2 on a plan card (its own
+  // click handler ran), mirror that selection into our custom UI.
+  const baskSelectionObserver = new MutationObserver(() => {
+    const selectedIdx = domCards.findIndex(c => c.classList.contains("border-2"));
+    if (selectedIdx === -1) return;
+    const id = idByIndex[selectedIdx];
+    const currentId = plans.find(p => p.selected)?.id;
+    if (id && id !== currentId) {
+      console.log("[CO] Bask selection changed → syncing custom UI to:", id);
+      plans.forEach(p => (p.selected = p.id === id));
+      render();
+    }
+  });
+  domCards.forEach(c => baskSelectionObserver.observe(c, { attributes: true, attributeFilter: ["class"] }));
+  addObserver(baskSelectionObserver);
 
   addListener(wrap, "click", e => { const c = e.target.closest(".prog-plan-card"); if (c) selectPlan(c.dataset.id); });
   addListener(wrap, "keydown", e => { if (e.key === " " || e.key === "Enter") { const c = e.target.closest(".prog-plan-card"); if (c) { e.preventDefault(); selectPlan(c.dataset.id); } } });
