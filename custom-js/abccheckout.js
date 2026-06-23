@@ -203,7 +203,7 @@ function isSelected(card) {
   return card?.classList.contains("border-2");
 }
 function getBilled(price, months) {
-  const total = price * months;
+  const total = Math.round(price * months);
   if (months === 3)
     return `Billed every 3 months ($${formatCurrency(total)} total)`;
   if (months === 6)
@@ -211,7 +211,7 @@ function getBilled(price, months) {
   return `Billed annually ($${formatCurrency(total)} total)`;
 }
 function getSavings(monthlyPrice, discountedPrice) {
-  const savings = (monthlyPrice - discountedPrice) * 12;
+  const savings = Math.round((monthlyPrice - discountedPrice) * 12);
   return `Save $${formatCurrency(savings)}/year vs monthly`;
 }
 function getPlans(cards) {
@@ -587,15 +587,12 @@ function mountCheckoutUI() {
   document.getElementById("stars").innerHTML = STAR.repeat(5);
 
   function customizeBaskButton() {
-    const LOCK_SVG = `<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>`;
+    const LOCK_SVG = `<svg data-tzmd-lock="1" width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>`;
     const OUR_HTML = `<div class="flex w-full items-center justify-center"><span class="flex items-center gap-1">${LOCK_SVG} Start My Treatment Plan</span></div>`;
 
     const applyToButton = (btn) => {
-      const isLoading = btn.disabled || !!btn.querySelector(".animate-spin");
-      if (isLoading) return;
-      if (!btn.innerHTML.includes("Start My Treatment Plan")) {
-        btn.innerHTML = OUR_HTML;
-      }
+      if (btn.querySelector('[data-tzmd-lock="1"]') && btn.textContent.includes("Start My Treatment Plan")) return;
+      btn.innerHTML = OUR_HTML;
     };
 
     const attachObserver = () => {
