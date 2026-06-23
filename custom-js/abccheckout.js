@@ -66,21 +66,98 @@ console.log("[CO] script start — activePage:", window.__TZMD__.activePage);
 
 // ─── SECTION VISIBILITY ───────────────────────────────────────────────────────
 let hiddenSection = null;
+let sectionHideObserver = null;
+
+// Selectors for the specific children of <section.relative> to hide.
+// The section also contains the total/discount/payment rows below — those stay visible.
+const BASK_HIDE_SELECTORS = [];
+
+function applyBaskHides(section) {
+  // If Bask hides the whole section (parent), undo that — we only hide specific children
+  if (section.classList.contains("hidden")) {
+    section.classList.remove("hidden");
+    console.log("[CO-DEBUG] stripped hidden from section.relative itself");
+  }
+  BASK_HIDE_SELECTORS.forEach((sel) => {
+    const el = section.querySelector(sel);
+    if (el && !el.classList.contains("hidden")) {
+      el.classList.add("hidden");
+      console.log("[CO-DEBUG] hiding selector el:", sel, el);
+    }
+  });
+  // Hide the "Choose Your Program" parent div (observer re-applies on React re-render)
+  const planUl = section.querySelector("ul.relative.mt-5.flex.flex-col.gap-3");
+  if (planUl?.parentElement && planUl.parentElement !== section) {
+    if (!planUl.parentElement.classList.contains("hidden")) {
+      planUl.parentElement.classList.add("hidden");
+      console.log("[CO-DEBUG] hiding Choose Your Program parent");
+    }
+  }
+  // Remove intro text, $0 black card, What Happens Next wrapper, and all HRs from DOM (observer re-removes on React re-render)
+  section.querySelectorAll(".mb-5.flex.flex-col.items-start.gap-3").forEach((el) => {
+    if (el.textContent.includes("Most programs give you a prescription")) {
+      console.log("[CO-DEBUG] removing intro text from DOM");
+      el.remove();
+    }
+  });
+  section.querySelectorAll(".mb-5.flex.w-full.flex-col.items-center.justify-start.gap-8 .flex.flex-col.items-center.justify-center.rounded-3xl").forEach((el) => {
+    console.log("[CO-DEBUG] removing $0 black card from DOM");
+    el.remove();
+  });
+  section.querySelectorAll(".mb-5.flex.w-full.flex-col.items-center.justify-start.gap-8 > div.w-full").forEach((el) => {
+    if (el.querySelector(".mt-4.flex.flex-col.gap-5")) {
+      console.log("[CO-DEBUG] removing What Happens Next wrapper from DOM");
+      el.remove();
+    }
+  });
+  section.querySelectorAll("hr.\\!m-0").forEach((hr) => {
+    console.log("[CO-DEBUG] removing hr from DOM");
+    hr.remove();
+  });
+}
 
 function hideOriginalSection() {
   const container = document.getElementById("script-container");
   const next = container?.nextElementSibling;
+  if (!next) return;
 
-  if (next && !next.classList.contains("hidden")) {
-    hiddenSection = next;
-    next.classList.add("hidden");
-    console.log("[CO] added hidden ✓");
+  function attach(section) {
+    hiddenSection = section;
+    applyBaskHides(section);
+    console.log("[CO] bask section children hidden ✓");
+
+    sectionHideObserver = new MutationObserver(() => applyBaskHides(section));
+    sectionHideObserver.observe(section, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+  }
+
+  const section = next.querySelector("section.relative");
+  if (section) {
+    attach(section);
+  } else {
+    const waitObserver = new MutationObserver(() => {
+      const s = next.querySelector("section.relative");
+      if (s) {
+        waitObserver.disconnect();
+        sectionHideObserver = null;
+        attach(s);
+      }
+    });
+    waitObserver.observe(next, { childList: true, subtree: true });
+    sectionHideObserver = waitObserver;
   }
 }
 
 function restoreOriginalSection() {
-  if (hiddenSection?.classList.contains("hidden")) {
-    hiddenSection.classList.remove("hidden");
+  if (sectionHideObserver) {
+    sectionHideObserver.disconnect();
+    sectionHideObserver = null;
+  }
+  if (hiddenSection) {
     console.log("[CO] removed hidden ✓");
   }
   hiddenSection = null;
@@ -103,9 +180,6 @@ let plans = [];
 let domCards = [];
 let plansObserver = null;
 
-// Payment element move state
-let paymentElOriginalParent = null;
-let paymentElOriginalNext = null;
 
 const CHECK =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
@@ -255,7 +329,7 @@ function mountCheckoutUI() {
   --bd: #EAEAE7;
   --sel-bg: #F4F8F1;
   --blue: #3B5BDB;       /* the blue subtext under select / billed */
-  width: 100%; max-width: 430px; background: #fff; color: var(--ink);
+  width: 100%; background: #fff; color: var(--ink);
   border-radius: 8px; padding: 20px 18px;
 }
 .prog-checkout { --prog-green: #3D5C2A; --prog-green-save: #4F8A37; --prog-ink: #1C1C1A; --prog-muted: #5B6470; --prog-bd: #E7E7E4; --prog-radio-off: #AEB1B8; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 100%; background: transparent; color: var(--prog-ink); }
@@ -303,10 +377,6 @@ function mountCheckoutUI() {
 .prog-testi .prog-stars svg { width: 10px; height: 10px; }
 .prog-testi .prog-quote { font-size: 9.5px; font-style: italic; font-weight: 600; color: var(--prog-ink); margin-top: 4px; line-height: 1.35; }
 .prog-testi .prog-by { font-size: 8.5px; font-weight: 500; color: var(--prog-muted); margin-top: 4px; }
-/* ── Payment slot ── */
-.prog-payment-slot { margin: 13px 0 0; }
-
-.prog-payment-loading { font-size: 11px; color: var(--prog-muted); text-align: center; padding: 20px 0; }
 /* ── Submit button ── */
 .prog-submit-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 16px 24px; margin-top: 11px; margin-bottom: 16px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: .1px; cursor: pointer; transition: background .15s ease; -webkit-font-smoothing: antialiased; }
 .prog-submit-btn:hover { background: #3a3a38; }
@@ -314,7 +384,7 @@ function mountCheckoutUI() {
 .prog-submit-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── Testimonial ── */
-.co-testi { margin: 14px 0 0; display: flex; align-items: center; gap: 14px; border: 1px solid var(--bd); border-radius: 12px; padding: 14px 16px; }
+.co-testi { margin: 14px 0 0; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; border: 1px solid var(--bd); border-radius: 12px; padding: 14px 16px; }
 .co-avatar { flex: none; width: 52px; height: 52px; border-radius: 50%; background: #E3E4E8; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #4A4F5A; }
 .co-stars { display: flex; gap: 2px; color: var(--g); }
 .co-stars svg { width: 15px; height: 15px; }
@@ -327,10 +397,6 @@ function mountCheckoutUI() {
 .co-trust-t1 { font-size: 13px; font-weight: 600; color: var(--g); line-height: 1.3; }
 .co-trust-t2 { font-size: 12px; font-weight: 400; color: var(--ink); margin-top: 2px; }
 
-.co-payment-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-.co-payment-hdr-l {letter-spacing: -0.2px; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #6B6C82; }
-.co-payment-hdr-l svg {margin-bottom: 2px; width: 16px; height: 16px; color: #6B6C82; }
-.co-payment-hdr-r {letter-spacing: -0.2px; font-size: 11px; font-weight: 500; color: #6B6C82; }
 
 .prog-fsa-row { margin: 14px 0 0; display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
 @media (max-width: 380px) { .prog-fsa-row { grid-template-columns: 1fr; } }
@@ -366,12 +432,11 @@ function mountCheckoutUI() {
 .co-badge { display: flex; flex-direction: row; align-items: center; gap: 3px; flex: 1; justify-content: center; padding: 0 2px; }
 .co-badge svg { width: 24px; height: 24px; color: var(--prog-green); flex: none; }
 .co-badge span { font-size: 8px; font-weight: 700; color: var(--prog-ink); text-align: left; line-height: 1.3; }
-.co-badge-div { width: 1px; height: 36px; background: var(--bd); flex: none; }
+.co-badge-div { width: 1px; height: 36px; background: #EAEAE7; flex: none; }
 </style>
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
-    <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Tirzepatide</span> program</h1>
-    <p class="prog-review">Reviewed and prescribed by a licensed U.S. physician<br>before treatment begins.</p>
+    <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Tirzepatide</span> plan</h1>
     <p class="prog-stat">Patients lose an average of 15–20%* of body weight<br>in their first year.</p>
   </div>
   <div class="prog-inc-title text-center">Every Plan Includes:</div>
@@ -394,7 +459,7 @@ function mountCheckoutUI() {
     <div class="vdiv" style="left:66.66%;top:58%;height:31%;"></div>
   </div>
   </div>
-  <div class="prog-select"><h2>Select your plan</h2><p>All plans include medication, supplies, program, and support.</p></div>
+  <div class="prog-select"><h2>Select your plan</h2></div>
   <div class="prog-plans" id="prog-plans"></div>
 
   <!-- Trust -->
@@ -431,49 +496,6 @@ function mountCheckoutUI() {
       <div class="co-quote">"Down 28 lbs in 3 months and my energy is back."</div>
       <div class="co-by">— Rachel M., Dallas</div>
     </div>
-  </div>
-  <div class="prog-payment-slot" id="tzmd-payment-slot">
-      <div class="co-payment-hdr">
-      <div class="co-payment-hdr-l">
-        <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="200px" width="200px" xmlns="http://www.w3.org/2000/svg"><path d="M376 192h-24v-46.7c0-52.7-42-96.5-94.7-97.3-53.4-.7-97.3 42.8-97.3 96v48h-24c-22 0-40 18-40 40v192c0 22 18 40 40 40h240c22 0 40-18 40-40V232c0-22-18-40-40-40zM270 316.8v68.8c0 7.5-5.8 14-13.3 14.4-8 .4-14.7-6-14.7-14v-69.2c-11.5-5.6-19.1-17.8-17.9-31.7 1.4-15.5 14.1-27.9 29.6-29 18.7-1.3 34.3 13.5 34.3 31.9 0 12.7-7.3 23.6-18 28.8zM324 192H188v-48c0-18.1 7.1-35.1 20-48s29.9-20 48-20 35.1 7.1 48 20 20 29.9 20 48v48z"></path></svg>
-        Secure payment information
-      </div>
-      <div class="co-payment-hdr-r">Your data is encrypted and secure.</div>
-    </div>
-    <div class="prog-payment-box" id="tzmd-payment-box">
-      <div class="prog-payment-loading">Loading secure payment form…</div>
-    </div>
-  </div>
-  <div style="margin-top: 8px;" class="sticky bottom-0 z-50 bg-white px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
-  <button id="tzmd-submit-btn" class="prog-submit-btn" type="button">
-    <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>
-    Start My Treatment Plan
-  </button>
-  <div class="co-urgency">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    Physician slots are limited — applications reviewed in the order received.
-  </div>
-  <div class="co-badges">
-    <div class="co-badge">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span>Licensed<br>U.S. Physicians</span>
-    </div>
-    <div class="co-badge-div"></div>
-    <div class="co-badge">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><line x1="12" y1="15" x2="12" y2="17"/></svg>
-      <span>HIPAA<br>Compliant</span>
-    </div>
-    <div class="co-badge-div"></div>
-    <div class="co-badge">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span>No Commitment<br>Until Approval</span>
-    </div>
-    <div class="co-badge-div"></div>
-    <div class="co-badge">
-      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="Delivery_Truck"><g><path d="M21.47,11.185l-1.03-1.43a2.5,2.5,0,0,0-2.03-1.05H14.03V6.565a2.5,2.5,0,0,0-2.5-2.5H4.56a2.507,2.507,0,0,0-2.5,2.5v9.94a1.5,1.5,0,0,0,1.5,1.5H4.78a2.242,2.242,0,0,0,4.44,0h5.56a2.242,2.242,0,0,0,4.44,0h1.22a1.5,1.5,0,0,0,1.5-1.5v-3.87A2.508,2.508,0,0,0,21.47,11.185ZM7,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,7,18.935Zm6.03-1.93H9.15a2.257,2.257,0,0,0-4.3,0H3.56a.5.5,0,0,1-.5-.5V6.565a1.5,1.5,0,0,1,1.5-1.5h6.97a1.5,1.5,0,0,1,1.5,1.5ZM17,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,17,18.935Zm3.94-2.43a.5.5,0,0,1-.5.5H19.15a2.257,2.257,0,0,0-4.3,0h-.82v-7.3h4.38a1.516,1.516,0,0,1,1.22.63l1.03,1.43a1.527,1.527,0,0,1,.28.87Z"></path><path d="M18.029,12.205h-2a.5.5,0,0,1,0-1h2a.5.5,0,0,1,0,1Z"></path></g></g></svg>
-      <span>Fast &amp; Discreet<br>Shipping</span>
-    </div>
-  </div>
   </div>
 </div>`;
 
@@ -564,103 +586,104 @@ function mountCheckoutUI() {
 
   document.getElementById("stars").innerHTML = STAR.repeat(5);
 
-  // ── Move Stripe payment element into our slot ────────────────────────────
-  function movePaymentIntoSlot() {
-    const paymentEl = document.getElementById("payment-element");
-    const slot = document.getElementById("tzmd-payment-box");
-    if (!paymentEl || !slot) return false;
-    if (slot.contains(paymentEl)) return true;
+  function customizeBaskButton() {
+    const LOCK_SVG = `<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>`;
+    const OUR_HTML = `<div class="flex w-full items-center justify-center"><span class="flex items-center gap-1">${LOCK_SVG} Start My Treatment Plan</span></div>`;
 
-    paymentElOriginalParent = paymentEl.parentNode;
-    paymentElOriginalNext = paymentEl.nextSibling;
-
-    slot.innerHTML = "";
-    slot.appendChild(paymentEl);
-    console.log("[CO] payment element moved into tzmd-payment-slot ✓");
-    return true;
-  }
-
-  if (!movePaymentIntoSlot()) {
-    const paymentSlotObserver = new MutationObserver(() => {
-      if (movePaymentIntoSlot()) paymentSlotObserver.disconnect();
-    });
-    paymentSlotObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-    addObserver(paymentSlotObserver);
-  }
-
-  // ── Submit button → triggers Bask's hidden form submit ──────────────────
-  addListener(document.getElementById("tzmd-submit-btn"), "click", () => {
-    console.log("[CO] tzmd-submit-btn clicked → triggering Bask submit");
-    const baskBtn = [
-      ...document.querySelectorAll("button[type='submit']"),
-    ].find((b) => b.textContent.includes("Start My Doctor Review"));
-    if (baskBtn) baskBtn.click();
-    else console.warn("[CO] Bask submit button not found");
-  });
-
-  function syncSubmitButtonState() {
-    const customBtn = document.getElementById("tzmd-submit-btn");
-    if (!customBtn) return;
+    const applyToButton = (btn) => {
+      const isLoading = btn.disabled || !!btn.querySelector(".animate-spin");
+      if (isLoading) return;
+      if (!btn.innerHTML.includes("Start My Treatment Plan")) {
+        btn.innerHTML = OUR_HTML;
+      }
+    };
 
     const attachObserver = () => {
-      const baskBtn = [
-        ...document.querySelectorAll("button[type='submit']"),
-      ].find((b) => b.textContent.includes("Start My Doctor Review"));
-
+      const baskBtn = [...document.querySelectorAll("button[type='submit']")].find(
+        (b) => b.textContent.includes("Start My Doctor Review") || b.textContent.includes("Start My Treatment Plan")
+      );
       if (!baskBtn) return false;
 
-      const updateState = () => {
-        const isLoading =
-          baskBtn.disabled || !!baskBtn.querySelector(".animate-spin");
+      applyToButton(baskBtn);
 
-        customBtn.disabled = isLoading;
-
-        customBtn.innerHTML = isLoading
-          ? `
-          <div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-neutral-100 border-t-neutral-300"></div>
-         
-        `
-          : `
-          <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>
-          Start My Treatment Plan
-        `;
-      };
-
-      updateState();
-
-      const observer = new MutationObserver(updateState);
-
+      const observer = new MutationObserver(() => applyToButton(baskBtn));
       observer.observe(baskBtn, {
         attributes: true,
         childList: true,
         subtree: true,
         attributeFilter: ["disabled", "class"],
       });
-
       addObserver(observer);
-
       return true;
     };
 
     if (!attachObserver()) {
       const waitForButton = new MutationObserver(() => {
-        if (attachObserver()) {
-          waitForButton.disconnect();
-        }
+        if (attachObserver()) waitForButton.disconnect();
       });
-
-      waitForButton.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-
+      waitForButton.observe(document.body, { childList: true, subtree: true });
       addObserver(waitForButton);
     }
   }
-  syncSubmitButtonState();
+  customizeBaskButton();
+
+  function injectStickyBar() {
+    const STICKY_ID = "tzmd-sticky-bar";
+    const STICKY_HTML = `<div id="${STICKY_ID}" class="prog-checkout" style="margin-top: 8px;" class="bg-white px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+  <div class="co-urgency">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Physician slots are limited — applications reviewed in the order received.
+  </div>
+  <div class="co-badges">
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Licensed<br>U.S. Physicians</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><line x1="12" y1="15" x2="12" y2="17"/></svg>
+      <span>HIPAA<br>Compliant</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>No Commitment<br>Until Approval</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="Delivery_Truck"><g><path d="M21.47,11.185l-1.03-1.43a2.5,2.5,0,0,0-2.03-1.05H14.03V6.565a2.5,2.5,0,0,0-2.5-2.5H4.56a2.507,2.507,0,0,0-2.5,2.5v9.94a1.5,1.5,0,0,0,1.5,1.5H4.78a2.242,2.242,0,0,0,4.44,0h5.56a2.242,2.242,0,0,0,4.44,0h1.22a1.5,1.5,0,0,0,1.5-1.5v-3.87A2.508,2.508,0,0,0,21.47,11.185ZM7,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,7,18.935Zm6.03-1.93H9.15a2.257,2.257,0,0,0-4.3,0H3.56a.5.5,0,0,1-.5-.5V6.565a1.5,1.5,0,0,1,1.5-1.5h6.97a1.5,1.5,0,0,1,1.5,1.5ZM17,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,17,18.935Zm3.94-2.43a.5.5,0,0,1-.5.5H19.15a2.257,2.257,0,0,0-4.3,0h-.82v-7.3h4.38a1.516,1.516,0,0,1,1.22.63l1.03,1.43a1.527,1.527,0,0,1,.28.87Z"></path><path d="M18.029,12.205h-2a.5.5,0,0,1,0-1h2a.5.5,0,0,1,0,1Z"></path></g></g></svg>
+      <span>Fast &amp; Discreet<br>Shipping</span>
+    </div>
+  </div>
+</div>`;
+
+    const findBtn = () =>
+      [...document.querySelectorAll("button[type='submit']")].find(
+        (b) => b.textContent.includes("Start My Doctor Review") || b.textContent.includes("Start My Treatment Plan")
+      );
+
+    const inject = () => {
+      if (document.getElementById(STICKY_ID)) return;
+      const btn = findBtn();
+      if (!btn) return;
+      const target = btn.closest("div.flex.w-full.flex-col.items-center.flex-grow.pb-4")
+        || document.querySelector("div.flex.w-full.flex-col.items-center.flex-grow.pb-4");
+      if (!target) return;
+      const tmp = document.createElement("div");
+      tmp.innerHTML = STICKY_HTML;
+      target.appendChild(tmp.firstElementChild);
+    };
+
+    inject();
+
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById(STICKY_ID)) inject();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    addObserver(observer);
+  }
+  injectStickyBar();
+
 }
 
 // ─── UNMOUNT ──────────────────────────────────────────────────────────────────
@@ -672,21 +695,6 @@ function unmountCheckoutUI() {
     window.__TZMD__.activePage,
   );
   restoreOriginalSection();
-  // Restore Stripe payment element to its original DOM position BEFORE
-  // clearing the container — otherwise the node is destroyed with innerHTML=""
-  if (paymentElOriginalParent) {
-    const paymentEl = document.getElementById("payment-element");
-    if (paymentEl) {
-      try {
-        paymentElOriginalParent.insertBefore(paymentEl, paymentElOriginalNext);
-        console.log("[CO] payment element restored ✓");
-      } catch (e) {
-        /* original parent may be gone */
-      }
-    }
-    paymentElOriginalParent = null;
-    paymentElOriginalNext = null;
-  }
 
   const container = document.getElementById("script-container");
   if (!container) {
@@ -696,6 +704,7 @@ function unmountCheckoutUI() {
 
   console.log("[CO] unmount — clearing container");
   container.innerHTML = "";
+  document.getElementById("tzmd-sticky-bar")?.remove();
   isMounted = false;
   plans = [];
   domCards = [];
@@ -709,8 +718,8 @@ function unmountCheckoutUI() {
 
 // ─── PAGE DETECTION ───────────────────────────────────────────────────────────
 function isCheckoutPage() {
-  return [...document.querySelectorAll("span")].some(
-    (el) => el.textContent.trim() === "Choose Your Program",
+  return !![...document.querySelectorAll("h4.font-velasans-gx")].find(
+    (h) => h.textContent.trim() === "Card Details"
   );
 }
 

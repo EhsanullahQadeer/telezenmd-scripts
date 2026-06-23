@@ -15,24 +15,44 @@ window.__TZMD__.createPage ??= function createPage(PAGE_ID) {
   registry.activePage = PAGE_ID;
   let destroyed = false;
   const disposables = { observers: [], timers: [], listeners: [] };
-  function addObserver(o) { disposables.observers.push(o); }
-  function addTimer(t) { disposables.timers.push(t); }
+  function addObserver(o) {
+    disposables.observers.push(o);
+  }
+  function addTimer(t) {
+    disposables.timers.push(t);
+  }
   function addListener(el, ev, fn, opts) {
     el.addEventListener(ev, fn, opts);
-    disposables.listeners.push({ element: el, event: ev, handler: fn, options: opts });
+    disposables.listeners.push({
+      element: el,
+      event: ev,
+      handler: fn,
+      options: opts,
+    });
   }
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+
     console.log(`[TZMD] ${PAGE_ID} destroy`);
-    if (PAGE_ID === "checkout") { unmountCheckoutUI(); }
+
+    // page specific cleanup
+    if (PAGE_ID === "checkout") {
+      unmountCheckoutUI();
+    }
+
     delete registry.cleanup[PAGE_ID];
-    if (registry.activePage === PAGE_ID) { registry.activePage = null; }
+
+    if (registry.activePage === PAGE_ID) {
+      registry.activePage = null;
+    }
+
     disposables.observers.forEach((o) => o.disconnect());
     disposables.timers.forEach((t) => clearTimeout(t));
     disposables.listeners.forEach(({ element, event, handler, options }) =>
-      element.removeEventListener(event, handler, options)
+      element.removeEventListener(event, handler, options),
     );
+
     disposables.observers = [];
     disposables.timers = [];
     disposables.listeners = [];
@@ -41,18 +61,23 @@ window.__TZMD__.createPage ??= function createPage(PAGE_ID) {
   return { addObserver, addTimer, addListener, destroy };
 };
 
+// ─── RESTORE HIDDEN SECTION ───────────────────────────────────────────────────
 console.log("[CO] script start — activePage:", window.__TZMD__.activePage);
 
+// ─── SECTION VISIBILITY ───────────────────────────────────────────────────────
 let hiddenSection = null;
+
 function hideOriginalSection() {
   const container = document.getElementById("script-container");
   const next = container?.nextElementSibling;
+
   if (next && !next.classList.contains("hidden")) {
     hiddenSection = next;
-    // next.classList.add("hidden");
+    next.classList.add("hidden");
     console.log("[CO] added hidden ✓");
   }
 }
+
 function restoreOriginalSection() {
   if (hiddenSection?.classList.contains("hidden")) {
     hiddenSection.classList.remove("hidden");
@@ -60,34 +85,55 @@ function restoreOriginalSection() {
   }
   hiddenSection = null;
 }
-
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
 const page = window.__TZMD__.createPage("checkout");
-if (!page) { console.log("[CO] already active or bailing"); return; }
+if (!page) {
+  console.log("[CO] already active or bailing");
+  return;
+}
 const { addObserver, addTimer, addListener, destroy } = page;
-console.log("[CO] createPage success — activePage:", window.__TZMD__.activePage);
+console.log(
+  "[CO] createPage success — activePage:",
+  window.__TZMD__.activePage,
+);
 
+// ─── STATE ────────────────────────────────────────────────────────────────────
 let isMounted = false;
 let plans = [];
 let domCards = [];
 let plansObserver = null;
+
+// Payment element move state
 let paymentElOriginalParent = null;
 let paymentElOriginalNext = null;
 
-const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
-const STAR  = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.4 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>';
+const CHECK =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+const STAR =
+  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.4 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>';
 
+// ─── PURE HELPERS ─────────────────────────────────────────────────────────────
 function getPrice(card) {
-  const text = card?.querySelector(":scope > div:first-child span:last-child")?.textContent || "";
+  const text =
+    card?.querySelector(":scope > div:first-child span:last-child")
+      ?.textContent || "";
   return parseFloat(text.replace(/[^0-9.]/g, ""));
 }
 function formatCurrency(amount) {
-  return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
-function isSelected(card) { return card?.classList.contains("border-2"); }
+function isSelected(card) {
+  return card?.classList.contains("border-2");
+}
 function getBilled(price, months) {
   const total = price * months;
-  if (months === 3) return `Billed every 3 months ($${formatCurrency(total)} total)`;
-  if (months === 6) return `Billed every 6 months ($${formatCurrency(total)} total)`;
+  if (months === 3)
+    return `Billed every 3 months ($${formatCurrency(total)} total)`;
+  if (months === 6)
+    return `Billed every 6 months ($${formatCurrency(total)} total)`;
   return `Billed annually ($${formatCurrency(total)} total)`;
 }
 function getSavings(monthlyPrice, discountedPrice) {
@@ -97,18 +143,72 @@ function getSavings(monthlyPrice, discountedPrice) {
 function getPlans(cards) {
   const monthlyPrice = getPrice(cards[3]);
   return [
-    { id: "quarterly",   name: "Quarterly Program",  price: getPrice(cards[0]), badge: "RECOMMENDED",    badgeStyle: "green", check: true,  billed: getBilled(getPrice(cards[0]), 3),  save: getSavings(monthlyPrice, getPrice(cards[0])), selected: isSelected(cards[0]), highlights: [{ text: "Most Popular", check: true }, { text: "Best Balance of<br>Savings & Flexibility", check: true }] },
-    { id: "sixmonth",    name: "6 Month Program",     price: getPrice(cards[1]), badge: "POPULAR UPGRADE", badgeStyle: "green", check: false, billed: getBilled(getPrice(cards[1]), 6),  save: getSavings(monthlyPrice, getPrice(cards[1])), selected: isSelected(cards[1]), highlights: [{ text: "Popular Upgrade", check: false, green: true }] },
-    { id: "twelvemonth", name: "12 Month Program",    price: getPrice(cards[2]), badge: "BEST VALUE",     badgeStyle: "green", check: false, billed: getBilled(getPrice(cards[2]), 12), save: getSavings(monthlyPrice, getPrice(cards[2])), selected: isSelected(cards[2]), highlights: [{ text: "Lowest Monthly Cost", check: false, green: true }] },
-    { id: "monthly",     name: "",                    price: monthlyPrice,       badge: "Starter Monthly", badgeStyle: "gray",  check: false, billed: "Billed monthly, cancel anytime",  selected: isSelected(cards[3]), highlights: [{ text: "Most patients upgrade<br>after their first month.", check: false }] },
+    {
+      id: "quarterly",
+      name: "Quarterly Program",
+      price: getPrice(cards[0]),
+      badge: "RECOMMENDED",
+      badgeStyle: "green",
+      check: true,
+      billed: getBilled(getPrice(cards[0]), 3),
+      save: getSavings(monthlyPrice, getPrice(cards[0])),
+      selected: isSelected(cards[0]),
+      highlights: [
+        { text: "Most Popular", check: true },
+        { text: "Best Balance of<br>Savings & Flexibility", check: true },
+      ],
+    },
+    {
+      id: "sixmonth",
+      name: "6 Month Program",
+      price: getPrice(cards[1]),
+      badge: "POPULAR UPGRADE",
+      badgeStyle: "green",
+      check: false,
+      billed: getBilled(getPrice(cards[1]), 6),
+      save: getSavings(monthlyPrice, getPrice(cards[1])),
+      selected: isSelected(cards[1]),
+      highlights: [{ text: "Popular Upgrade", check: false, green: true }],
+    },
+    {
+      id: "twelvemonth",
+      name: "12 Month Program",
+      price: getPrice(cards[2]),
+      badge: "BEST VALUE",
+      badgeStyle: "green",
+      check: false,
+      billed: getBilled(getPrice(cards[2]), 12),
+      save: getSavings(monthlyPrice, getPrice(cards[2])),
+      selected: isSelected(cards[2]),
+      highlights: [{ text: "Lowest Monthly Cost", check: false, green: true }],
+    },
+    {
+      id: "monthly",
+      name: "",
+      price: monthlyPrice,
+      badge: "Starter Monthly",
+      badgeStyle: "gray",
+      check: false,
+      billed: "Billed monthly, cancel anytime",
+      selected: isSelected(cards[3]),
+      highlights: [
+        { text: "Most patients upgrade<br>after their first month.", check: false },
+      ],
+    },
   ];
 }
 function planHTML(p) {
-  const badge = p.badge ? `<span class="prog-plan-badge prog-${p.badgeStyle}">${p.check ? CHECK : ""}${p.badge}</span>` : "";
-  const name  = p.name  ? `<div class="prog-plan-name">${p.name}</div>` : "";
-  const save  = p.save  ? `<div class="prog-plan-save">${p.save}</div>` : "";
-  const notes = (p.notes || []).map((n) => `<div class="prog-plan-note">${n}</div>`).join("");
-  const hlItems = (p.highlights || []).map((h) => `<div class="prog-plan-hl">${h.check ? `<svg class="prog-plan-hl-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>` : ""}<span class="prog-plan-hl-text${(h.check || h.green) ? " prog-hl-green" : ""}">${h.text}</span></div>`).join("");
+  const badge = p.badge
+    ? `<span class="prog-plan-badge prog-${p.badgeStyle}">${p.check ? CHECK : ""}${p.badge}</span>`
+    : "";
+  const name = p.name ? `<div class="prog-plan-name">${p.name}</div>` : "";
+  const save = p.save ? `<div class="prog-plan-save">${p.save}</div>` : "";
+  const notes = (p.notes || [])
+    .map((n) => `<div class="prog-plan-note">${n}</div>`)
+    .join("");
+  const hlItems = (p.highlights || [])
+    .map((h) => `<div class="prog-plan-hl">${h.check ? `<svg class="prog-plan-hl-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>` : ""}<span class="prog-plan-hl-text${(h.check || h.green) ? " prog-hl-green" : ""}">${h.text}</span></div>`)
+    .join("");
   const highlightsHTML = hlItems ? `<div class="prog-plan-highlights">${hlItems}</div>` : "";
   return `<div class="prog-plan-card ${p.selected ? "prog-selected" : ""}" data-id="${p.id}" role="radio" aria-checked="${p.selected}" tabindex="0">
     ${badge}<div class="prog-plan-row"><span class="prog-plan-radio"></span>
@@ -117,25 +217,57 @@ function planHTML(p) {
     <div class="prog-plan-billed">${p.billed}</div>${save}${notes}</div>${highlightsHTML}</div></div>`;
 }
 
+// ─── MOUNT ────────────────────────────────────────────────────────────────────
 function mountCheckoutUI() {
-  console.log("[CO] mountCheckoutUI — isMounted:", isMounted, "activePage:", window.__TZMD__.activePage);
+  console.log(
+    "[CO] mountCheckoutUI — isMounted:",
+    isMounted,
+    "activePage:",
+    window.__TZMD__.activePage,
+  );
   hideOriginalSection();
-  if (isMounted) { console.log("[CO] already mounted, skip"); return; }
+  if (isMounted) {
+    console.log("[CO] already mounted, skip");
+    return;
+  }
+
   const container = document.getElementById("script-container");
-  if (!container) { console.log("[CO] no script-container"); return; }
+  if (!container) {
+    console.log("[CO] no script-container");
+    return;
+  }
 
   container.innerHTML = `
 <style>
-#script-container { width: 100%; display: flex; flex-direction: column; align-items: center; flex-grow: 1; }
-.co { --g: #1F4220; --g2: #2F5A2A; --gs: #2F5A2A; --ink: #1A1A18; --muted: #6B7280; --bd: #EAEAE7; --sel-bg: #F4F8F1; --blue: #3B5BDB; width: 100%; max-width: 430px; background: #fff; color: var(--ink); border-radius: 8px; padding: 20px 18px; }
+#script-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-grow: 1;
+}
+  .co {
+  --g: #1F4220;          /* dark forest green */
+  --g2: #2F5A2A;         /* slightly lighter green text */
+  --gs: #2F5A2A;         /* savings green */
+  --ink: #1A1A18;
+  --muted: #6B7280;
+  --bd: #EAEAE7;
+  --sel-bg: #F4F8F1;
+  --blue: #3B5BDB;       /* the blue subtext under select / billed */
+  width: 100%; max-width: 430px; background: #fff; color: var(--ink);
+  border-radius: 8px; padding: 20px 18px;
+}
 .prog-checkout { --prog-green: #3D5C2A; --prog-green-save: #4F8A37; --prog-ink: #1C1C1A; --prog-muted: #5B6470; --prog-bd: #E7E7E4; --prog-radio-off: #AEB1B8; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 100%; background: transparent; color: var(--prog-ink); }
 .prog-checkout, .prog-checkout * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
 .prog-head { text-align: center; padding: 6px 0 0; }
 .prog-title { font-size: 24.5px; font-weight: 700; line-height: 1.22; letter-spacing: -.2px; }
 .prog-title .prog-g { color: var(--prog-green); }
+.prog-review { color: var(--prog-muted); font-size: 12.5px; font-weight: 500; line-height: 1.5; margin-top: 7px; padding: 0 8px; }
 .prog-stat { font-size: 13px; font-weight: 700; line-height: 1.4; margin-top: 9px; padding: 0 6px; }
 .prog-select { padding: 14px 0 0; }
 .prog-select h2 { font-size: 18.5px; font-weight: 700; letter-spacing: -.2px; }
+.prog-select p { color: var(--ink); font-size: 12.5px; font-weight: 500; margin-top: 3px; }
 .prog-plans { padding: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .prog-plan-card { position: relative; background: #fff; border: 1px solid var(--bd); border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
 .prog-plan-card.prog-selected { border-color: var(--prog-green); background: #FBFCF8; }
@@ -145,6 +277,7 @@ function mountCheckoutUI() {
 .prog-plan-badge svg { width: 10px; height: 10px; }
 .prog-plan-row { display: flex; gap: 7px; align-items: flex-start; }
 .prog-plan-radio { position: relative; flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--prog-radio-off); transition: border-color .15s ease; }
+.prog-plan-radio::x { content: ''; position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); transition: background .15s ease; }
 .prog-plan-card.prog-selected .prog-plan-radio { border-color: var(--prog-green); }
 .prog-plan-card.prog-selected .prog-plan-radio::after { background: var(--prog-green); }
 .prog-plan-content { flex: 1; min-width: 0; }
@@ -160,10 +293,45 @@ function mountCheckoutUI() {
 .prog-plan-hl-check { flex: none; width: 13px; height: 13px; color: var(--prog-green); margin-top: 1px; }
 .prog-plan-hl-text { font-size: 10px; font-weight: 600; color: var(--prog-muted); line-height: 1.3; }
 .prog-plan-hl-text.prog-hl-green { color: var(--prog-green); font-weight: 700; }
-.co-trust { margin: 14px 0 0; display: flex; align-items: center; gap: 12px; background: #EEF3EA; border-radius: 12px; padding: 14px 16px; border: 1px solid var(--bd); }
+.prog-trust { margin: 11px 0 0; display: flex; align-items: center; gap: 9px; background: #EEF2EC; border: 1px solid #E0E8D8; border-radius: 10px; padding: 9px 12px; }
+.prog-trust svg { width: 19px; height: 19px; color: var(--prog-green); flex: none; }
+.prog-trust .prog-t1 { font-size: 9.5px; font-weight: 700; color: var(--prog-green); line-height: 1.3; }
+.prog-trust .prog-t2 { font-size: 8.5px; font-weight: 500; color: var(--prog-ink); margin-top: 1px; }
+.prog-testi { margin: 13px 0 0; display: flex; align-items: center; gap: 12px; }
+.prog-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: #DEDFE6; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #3A3F4A; letter-spacing: .5px; }
+.prog-testi .prog-stars { display: flex; gap: 1.5px; color: var(--prog-green); }
+.prog-testi .prog-stars svg { width: 10px; height: 10px; }
+.prog-testi .prog-quote { font-size: 9.5px; font-style: italic; font-weight: 600; color: var(--prog-ink); margin-top: 4px; line-height: 1.35; }
+.prog-testi .prog-by { font-size: 8.5px; font-weight: 500; color: var(--prog-muted); margin-top: 4px; }
+/* ── Payment slot ── */
+.prog-payment-slot { margin: 13px 0 0; }
+
+.prog-payment-loading { font-size: 11px; color: var(--prog-muted); text-align: center; padding: 20px 0; }
+/* ── Submit button ── */
+.prog-submit-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 16px 24px; margin-top: 11px; margin-bottom: 16px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: .1px; cursor: pointer; transition: background .15s ease; -webkit-font-smoothing: antialiased; }
+.prog-submit-btn:hover { background: #3a3a38; }
+.prog-submit-btn:active { transform: translateY(1px); }
+.prog-submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Testimonial ── */
+.co-testi { margin: 14px 0 0; display: flex; align-items: center; gap: 14px; border: 1px solid var(--bd); border-radius: 12px; padding: 14px 16px; }
+.co-avatar { flex: none; width: 52px; height: 52px; border-radius: 50%; background: #E3E4E8; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #4A4F5A; }
+.co-stars { display: flex; gap: 2px; color: var(--g); }
+.co-stars svg { width: 15px; height: 15px; }
+.co-quote { font-size: 13px; font-style: italic; font-weight: 600; color: var(--ink); margin-top: 5px; line-height: 1.4; }
+.co-by { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+
+/* ── Trust ── */
+.co-trust { margin: 14px 0 0; display: flex; align-items: center; gap: 12px; background: #EEF3EA; border-radius: 12px; padding: 14px 16px;    border: 1px solid var(--bd); }
 .co-trust-icon svg { width: 40px; height: 40px; color: var(--g); flex: none; }
 .co-trust-t1 { font-size: 13px; font-weight: 600; color: var(--g); line-height: 1.3; }
 .co-trust-t2 { font-size: 12px; font-weight: 400; color: var(--ink); margin-top: 2px; }
+
+.co-payment-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+.co-payment-hdr-l {letter-spacing: -0.2px; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #6B6C82; }
+.co-payment-hdr-l svg {margin-bottom: 2px; width: 16px; height: 16px; color: #6B6C82; }
+.co-payment-hdr-r {letter-spacing: -0.2px; font-size: 11px; font-weight: 500; color: #6B6C82; }
+
 .prog-fsa-row { margin: 14px 0 0; display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
 @media (max-width: 380px) { .prog-fsa-row { grid-template-columns: 1fr; } }
 .prog-fsa-box, .prog-pay-box { background: #F7F8F6; border: 1px solid var(--bd); border-radius: 12px; padding: 12px; min-width: 0; }
@@ -179,12 +347,12 @@ function mountCheckoutUI() {
 .prog-affirm { height: 20px; width: auto; overflow: visible; }
 .prog-afterpay { height: 15px; width: auto; overflow: visible; margin-bottom: -2px; }
 .prog-pay-sub { font-size: 12px; font-weight: 500; color: var(--prog-ink); line-height: 1.6; }
-.prog-checkout .features-parent { border: 1px solid var(--bd); border-radius: 18px; margin: 0; padding: 6px 0; }
+.prog-checkout .features-parent {border: 1px solid var(--bd); border-radius: 18px; margin: 0; padding: 6px 0; }
 .prog-checkout .prog-inc-title { font-size: 18.5px; font-weight: 700; color: var(--prog-ink); line-height: 1.3; margin-top: 20px; margin-bottom: 8px; }
-.prog-checkout .features { position: relative; }
+.prog-checkout .features { position: relative;   }
 .prog-checkout .frow { display: grid; grid-template-columns: repeat(3, 1fr); }
 .prog-checkout .fcell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; padding: 12px 3px 11px; gap: 8px; }
-.prog-checkout .ficon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+.prog-checkout .ficon { width: 40px; height: 40px; color: var(--primary-green); display: flex; align-items: center; justify-content: center; }
 .prog-checkout .ficon img { width: 100%; height: 100%; object-fit: contain; }
 .prog-checkout .flabel { font-size: 9.5px; line-height: 1.4; font-weight: 500; color: var(--ink); white-space: nowrap; letter-spacing: -0.1px; }
 .prog-checkout .features .vdiv { position: absolute; width: 1px; background: var(--bd); }
@@ -192,38 +360,6 @@ function mountCheckoutUI() {
 .prog-checkout .features .hdiv-1 { left: 24px; width: calc(33.33% - 42px); }
 .prog-checkout .features .hdiv-2 { left: calc(33.33% + 18px); width: calc(33.33% - 36px); }
 .prog-checkout .features .hdiv-3 { left: calc(66.66% + 18px); right: 24px; }
-.co-testi { margin: 14px 0 0; display: flex; align-items: center; gap: 14px; border: 1px solid var(--bd); border-radius: 12px; padding: 14px 16px; }
-.co-avatar { flex: none; width: 52px; height: 52px; border-radius: 50%; background: #E3E4E8; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; color: #4A4F5A; }
-.co-stars { display: flex; gap: 2px; color: var(--g); }
-.co-stars svg { width: 15px; height: 15px; }
-.co-quote { font-size: 13px; font-style: italic; font-weight: 600; color: var(--ink); margin-top: 5px; line-height: 1.4; }
-.co-by { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 4px; }
-/* ── Coupon ── */
-.co-coupon { margin: 14px 0 0; }
-.co-coupon-row { display: flex; gap: 8px; }
-.co-coupon-input { flex: 1; height: 40px; border: 1.5px solid var(--bd); border-radius: 8px; padding: 0 12px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; font-weight: 500; color: var(--ink); background: #fff; outline: none; transition: border-color .15s; }
-.co-coupon-input::placeholder { color: #B0B4BC; font-weight: 400; }
-.co-coupon-input:focus { border-color: var(--g); }
-.co-coupon-input.tzmd-applied { border-color: #2E8B57; background: #F2FAF5; }
-.co-coupon-input.tzmd-error { border-color: #D94040; }
-.co-coupon-btn { height: 40px; padding: 0 16px; border: none; border-radius: 8px; background: var(--g); color: #fff; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; flex: none; transition: background .15s; }
-.co-coupon-btn:hover { background: #163217; }
-.co-coupon-btn:disabled { background: #9CAE9C; cursor: not-allowed; }
-.co-coupon-msg { margin-top: 5px; font-size: 11px; font-weight: 500; line-height: 1.4; min-height: 0; }
-.co-coupon-msg.tzmd-applied { color: #2E7D52; }
-.co-coupon-msg.tzmd-error { color: #D94040; }
-/* ── Payment slot ── */
-.prog-payment-slot { margin: 13px 0 0; }
-.prog-payment-loading { font-size: 11px; color: var(--prog-muted); text-align: center; padding: 20px 0; }
-.co-payment-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-.co-payment-hdr-l { letter-spacing: -0.2px; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: #6B6C82; }
-.co-payment-hdr-l svg { margin-bottom: 2px; width: 16px; height: 16px; color: #6B6C82; }
-.co-payment-hdr-r { letter-spacing: -0.2px; font-size: 11px; font-weight: 500; color: #6B6C82; }
-/* ── Submit button ── */
-.prog-submit-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 16px 24px; margin-top: 11px; margin-bottom: 16px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: .1px; cursor: pointer; transition: background .15s ease; -webkit-font-smoothing: antialiased; }
-.prog-submit-btn:hover { background: #3a3a38; }
-.prog-submit-btn:active { transform: translateY(1px); }
-.prog-submit-btn:disabled { opacity: .5; cursor: not-allowed; }
 .co-urgency { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9px; font-weight: 600; color: var(--prog-green); margin-top: 6px; line-height: 1.4; text-align: center; }
 .co-urgency svg { flex: none; width: 15px; height: 15px; color: var(--prog-green); }
 .co-badges { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-bottom: 4px; }
@@ -234,7 +370,7 @@ function mountCheckoutUI() {
 </style>
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
-    <h1 class="prog-title">\${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Tirzepatide</span> plan</h1>
+    <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Semaglutide</span> plan</h1>
     <p class="prog-stat">Patients lose an average of 15–20%* of body weight<br>in their first year.</p>
   </div>
   <div class="prog-inc-title text-center">Every Plan Includes:</div>
@@ -259,14 +395,23 @@ function mountCheckoutUI() {
   </div>
   <div class="prog-select"><h2>Select your plan</h2></div>
   <div class="prog-plans" id="prog-plans"></div>
+
+  <!-- Trust -->
   <div class="co-trust">
-    <div class="co-trust-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
-    <div><div class="co-trust-t1">No charge unless approved by your physician.</div><div class="co-trust-t2">If approved, your treatment begins.</div></div>
+    <div class="co-trust-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+    </div>
+    <div>
+      <div class="co-trust-t1">No charge unless approved by your physician.</div>
+      <div class="co-trust-t2">If approved, your treatment begins.</div>
+    </div>
   </div>
-  <div class="prog-fsa-row">
+
+    <div class="prog-fsa-row">
     <div class="prog-fsa-box">
       <div class="prog-fsa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h3"/></svg></div>
-      <div><div class="prog-fsa-lbl">FSA / HSA Eligible</div><div class="prog-fsa-sub">Reimbursable with FSA or HSA funds.</div></div>
+      <div><div class="prog-fsa-lbl">FSA / HSA Eligible</div>
+      <div class="prog-fsa-sub">Reimbursable with FSA or HSA funds.</div></div>
     </div>
     <div class="prog-pay-box">
       <div class="prog-pay-lbl">Flexible Payment Options</div>
@@ -275,10 +420,10 @@ function mountCheckoutUI() {
         <svg class="prog-affirm" viewBox="0 3 72 30" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M49.928 4.5c-8.575 0-16.262 5.948-18.425 13.635h3.128c1.816-5.717 7.996-10.738 15.297-10.738 8.922 0 16.609 6.798 16.609 17.343 0 2.357-.309 4.52-.888 6.412h3.013l.038-.116c.502-1.93.734-4.055.734-6.296 0-11.742-8.575-20.24-19.506-20.24Z" fill="currentColor"/><path d="M29.495 20.027h-2.897v-1.12c0-1.468.85-1.893 1.584-1.893.81 0 1.429.348 1.429.348l.966-2.24s-1.005-.657-2.82-.657c-2.047 0-4.365 1.159-4.365 4.75v.812h-4.79v-1.12c0-1.468.85-1.893 1.584-1.893.425 0 .966.078 1.43.348l.965-2.24c-.58-.348-1.545-.657-2.82-.657-2.047 0-4.365 1.159-4.365 4.75v.812h-1.854V22.5h1.854v8.652h3.168V22.5h4.867v8.652h3.167V22.5h2.897v-2.472ZM37.22 20.027v11.124h3.168v-5.369c0-2.549 1.545-3.283 2.627-3.283.425 0 1.004.116 1.352.386l.58-2.935a4.04 4.04 0 0 0-1.43-.27c-1.622 0-2.665.733-3.36 2.201v-1.854H37.22Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M7.362 19.718c-1.815 0-3.94.85-5.098 1.777l1.042 2.202c.928-.85 2.395-1.546 3.747-1.546 1.275 0 1.97.425 1.97 1.275 0 .58-.463.85-1.352.966-3.283.425-5.871 1.313-5.871 3.863 0 2.008 1.43 3.244 3.67 3.244 1.583 0 3.012-.888 3.708-2.047v1.7h2.974V23.89c0-2.974-2.086-4.172-4.79-4.172Zm-1.12 9.425c-.85 0-1.236-.425-1.236-1.082 0-1.274 1.39-1.7 3.979-1.97 0 1.7-1.16 3.052-2.743 3.052Z" fill="currentColor"/><path d="M56.148 21.688c.657-.966 1.893-1.97 3.592-1.97 2.047 0 3.708 1.236 3.67 3.747v7.686h-3.168V24.47c0-1.468-.888-2.086-1.738-2.086-1.043 0-2.086.966-2.086 3.052v5.716h-3.167v-6.643c0-1.545-.811-2.125-1.738-2.125-1.005 0-2.086 1.005-2.086 3.052v5.716H46.26V20.027h3.051v1.7c.54-1.082 1.7-2.009 3.4-2.009 1.544 0 2.819.734 3.437 1.97ZM31.388 20.027h3.168v11.124h-3.168V20.027Z" fill="currentColor"/></svg>
         <svg class="prog-afterpay" viewBox="-2 -2 125 28" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.95859 11.7444C9.95859 9.5873 8.43108 8.07125 6.55474 8.07125C4.6784 8.07125 3.15087 9.61286 3.15087 11.7444C3.15087 13.8503 4.6784 15.4175 6.55474 15.4175C8.43299 15.4155 9.95859 13.9015 9.95859 11.7444ZM9.98543 18.1645V16.4951C9.05972 17.6513 7.68169 18.369 6.03151 18.369C2.60273 18.369 0 15.5433 0 11.7444C0 7.969 2.70239 5.0942 6.10817 5.0942C7.71044 5.0942 9.06163 5.81389 9.98735 6.94257V5.32427H13.0654V18.1645H9.98543Z" fill="currentColor"/><path d="M28.0167 15.3133C26.9396 15.3133 26.6406 14.9023 26.6406 13.8248V8.12434H28.6185V5.32427H26.6406V2.19189H23.4859V5.32427H19.4227V4.54363C19.4227 3.46411 19.8233 3.05314 20.9253 3.05314H21.6172V0.561789H20.0993C17.4965 0.561789 16.2699 1.43484 16.2699 4.10513V5.3223H14.5182V8.12237H16.2699V18.1625H19.4246V8.12237H23.4878V14.4147C23.4878 17.0338 24.4633 18.1645 27.0162 18.1645H28.6434V15.3133H28.0167Z" fill="currentColor"/><path d="M39.3303 10.5882C39.1061 8.91874 37.7779 7.91787 36.2273 7.91787C34.6749 7.91787 33.3985 8.89318 33.0746 10.5882H39.3303ZM33.0477 12.5919C33.2739 14.4914 34.6002 15.5709 36.2772 15.5709C37.6035 15.5709 38.6307 14.9279 39.2306 13.9015H42.4601C41.7088 16.6229 39.3303 18.369 36.2024 18.369C32.4229 18.369 29.7704 15.6476 29.7704 11.7699C29.7704 7.89231 32.5743 5.09224 36.2791 5.09224C40.0088 5.09224 42.7112 7.91787 42.7112 11.7699C42.7112 12.0531 42.6862 12.3343 42.6364 12.5919H33.0477Z" fill="currentColor"/><path d="M62.7683 11.7444C62.7683 9.66399 61.2408 8.07125 59.3644 8.07125C57.4881 8.07125 55.9606 9.61286 55.9606 11.7444C55.9606 13.8503 57.4881 15.4175 59.3644 15.4175C61.2408 15.4155 62.7683 13.8248 62.7683 11.7444ZM52.8557 5.32427H55.9337V6.99369C56.8594 5.81192 58.2355 5.0942 59.8876 5.0942C63.2666 5.0942 65.9192 7.9454 65.9192 11.7188C65.9192 15.4942 63.2168 18.371 59.8129 18.371C58.2356 18.371 56.9342 17.728 56.0334 16.6504V23.448H52.8557V5.32427Z" fill="currentColor"/><path d="M77.0143 11.7444C77.0143 9.5873 75.4887 8.07125 73.6104 8.07125C71.7341 8.07125 70.2066 9.61286 70.2066 11.7444C70.2066 13.8503 71.7341 15.4175 73.6104 15.4175C75.4887 15.4155 77.0143 13.9015 77.0143 11.7444ZM77.0411 18.1645V16.4951C76.1154 17.6513 74.7374 18.369 73.0872 18.369C69.6584 18.369 67.0557 15.5433 67.0557 11.7444C67.0557 7.969 69.7581 5.0942 73.1619 5.0942C74.7642 5.0942 76.1154 5.81389 77.0411 6.94257V5.32427H80.1191V18.1645H77.0411Z" fill="currentColor"/><path d="M47.3072 6.58273C47.3072 6.58273 48.091 5.0942 50.0096 5.0942C50.8299 5.0942 51.3608 5.38326 51.3608 5.38326V8.65918C51.3608 8.65918 50.2031 7.92574 49.1394 8.07322C48.0757 8.22069 47.403 9.22353 47.4068 10.5646V18.1665H44.2291V5.32624H47.3072V6.58273Z" fill="currentColor"/><path d="M94.4955 5.32426L86.7237 23.4067H83.4464L86.4976 16.4164L81.3381 5.32426H85.0525L88.0711 12.7354L91.1683 5.32426H94.4955Z" fill="currentColor"/><path d="M119.304 5.03325L111.599 0.471336C109.338 -0.867743 106.511 0.805615 106.511 3.48574V3.95373C106.511 4.37649 106.731 4.76779 107.087 4.97819L108.542 5.83945C108.97 6.09311 109.502 5.77653 109.502 5.27118V4.1071C109.502 3.52507 110.116 3.16129 110.606 3.45231L117.28 7.40466C117.771 7.69568 117.771 8.42323 117.28 8.71228L110.606 12.6646C110.116 12.9556 109.502 12.5919 109.502 12.0098V11.3904C109.502 8.71031 106.675 7.03499 104.412 8.37603L96.7072 12.9379C94.4457 14.277 94.4457 17.6277 96.7072 18.9668L104.412 23.5287C106.673 24.8677 109.502 23.1944 109.502 20.5143V20.0463C109.502 19.6235 109.282 19.2342 108.925 19.0218L107.471 18.1586C107.043 17.9049 106.511 18.2215 106.511 18.7269V19.8909C106.511 20.473 105.897 20.8367 105.407 20.5457L98.7331 16.5934C98.2424 16.3024 98.2424 15.5748 98.7331 15.2838L105.407 11.3314C105.897 11.0404 106.511 11.4042 106.511 11.9862V12.6056C106.511 15.2858 109.338 16.9611 111.599 15.62L119.304 11.0581C121.565 9.72298 121.565 6.37233 119.304 5.03325Z" fill="currentColor"/></svg>
       </div>
-      <div class="prog-pay-sub">Buy now, pay over time. Options available at checkout.</div>
     </div>
   </div>
-  <div class="co-testi">
+
+    <div class="co-testi">
     <div class="co-avatar">RM</div>
     <div>
       <div class="co-stars" id="stars"></div>
@@ -286,16 +431,8 @@ function mountCheckoutUI() {
       <div class="co-by">— Rachel M., Dallas</div>
     </div>
   </div>
-  <!-- ── Coupon code ── -->
-  <div class="co-coupon" id="tzmd-coupon-wrap">
-    <div class="co-coupon-row">
-      <input id="tzmd-coupon-input" class="co-coupon-input" type="text" placeholder="Discount code" autocomplete="off" spellcheck="false">
-      <button id="tzmd-coupon-btn" class="co-coupon-btn" type="button">Apply</button>
-    </div>
-    <div id="tzmd-coupon-msg" class="co-coupon-msg"></div>
-  </div>
   <div class="prog-payment-slot" id="tzmd-payment-slot">
-    <div class="co-payment-hdr">
+      <div class="co-payment-hdr">
       <div class="co-payment-hdr-l">
         <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="200px" width="200px" xmlns="http://www.w3.org/2000/svg"><path d="M376 192h-24v-46.7c0-52.7-42-96.5-94.7-97.3-53.4-.7-97.3 42.8-97.3 96v48h-24c-22 0-40 18-40 40v192c0 22 18 40 40 40h240c22 0 40-18 40-40V232c0-22-18-40-40-40zM270 316.8v68.8c0 7.5-5.8 14-13.3 14.4-8 .4-14.7-6-14.7-14v-69.2c-11.5-5.6-19.1-17.8-17.9-31.7 1.4-15.5 14.1-27.9 29.6-29 18.7-1.3 34.3 13.5 34.3 31.9 0 12.7-7.3 23.6-18 28.8zM324 192H188v-48c0-18.1 7.1-35.1 20-48s29.9-20 48-20 35.1 7.1 48 20 20 29.9 20 48v48z"></path></svg>
         Secure payment information
@@ -307,23 +444,35 @@ function mountCheckoutUI() {
     </div>
   </div>
   <div style="margin-top: 8px;" class="sticky bottom-0 z-50 bg-white px-4 py-2 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
-    <button id="tzmd-submit-btn" class="prog-submit-btn" type="button">
-      <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>
-      Start My Treatment Plan
-    </button>
-    <div class="co-urgency">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Physician slots are limited — applications reviewed in the order received.
+  <button id="tzmd-submit-btn" class="prog-submit-btn" type="button">
+    <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>
+    Start My Treatment Plan
+  </button>
+  <div class="co-urgency">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Physician slots are limited — applications reviewed in the order received.
+  </div>
+  <div class="co-badges">
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Licensed<br>U.S. Physicians</span>
     </div>
-    <div class="co-badges">
-      <div class="co-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>Licensed<br>U.S. Physicians</span></div>
-      <div class="co-badge-div"></div>
-      <div class="co-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><line x1="12" y1="15" x2="12" y2="17"/></svg><span>HIPAA<br>Compliant</span></div>
-      <div class="co-badge-div"></div>
-      <div class="co-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span>No Commitment<br>Until Approval</span></div>
-      <div class="co-badge-div"></div>
-      <div class="co-badge"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="Delivery_Truck"><g><path d="M21.47,11.185l-1.03-1.43a2.5,2.5,0,0,0-2.03-1.05H14.03V6.565a2.5,2.5,0,0,0-2.5-2.5H4.56a2.507,2.507,0,0,0-2.5,2.5v9.94a1.5,1.5,0,0,0,1.5,1.5H4.78a2.242,2.242,0,0,0,4.44,0h5.56a2.242,2.242,0,0,0,4.44,0h1.22a1.5,1.5,0,0,0,1.5-1.5v-3.87A2.508,2.508,0,0,0,21.47,11.185ZM7,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,7,18.935Zm6.03-1.93H9.15a2.257,2.257,0,0,0-4.3,0H3.56a.5.5,0,0,1-.5-.5V6.565a1.5,1.5,0,0,1,1.5-1.5h6.97a1.5,1.5,0,0,1,1.5,1.5ZM17,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,17,18.935Zm3.94-2.43a.5.5,0,0,1-.5.5H19.15a2.257,2.257,0,0,0-4.3,0h-.82v-7.3h4.38a1.516,1.516,0,0,1,1.22.63l1.03,1.43a1.527,1.527,0,0,1,.28.87Z"></path><path d="M18.029,12.205h-2a.5.5,0,0,1,0-1h2a.5.5,0,0,1,0,1Z"></path></g></g></svg><span>Fast &amp; Discreet<br>Shipping</span></div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><line x1="12" y1="15" x2="12" y2="17"/></svg>
+      <span>HIPAA<br>Compliant</span>
     </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>No Commitment<br>Until Approval</span>
+    </div>
+    <div class="co-badge-div"></div>
+    <div class="co-badge">
+      <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g id="Delivery_Truck"><g><path d="M21.47,11.185l-1.03-1.43a2.5,2.5,0,0,0-2.03-1.05H14.03V6.565a2.5,2.5,0,0,0-2.5-2.5H4.56a2.507,2.507,0,0,0-2.5,2.5v9.94a1.5,1.5,0,0,0,1.5,1.5H4.78a2.242,2.242,0,0,0,4.44,0h5.56a2.242,2.242,0,0,0,4.44,0h1.22a1.5,1.5,0,0,0,1.5-1.5v-3.87A2.508,2.508,0,0,0,21.47,11.185ZM7,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,7,18.935Zm6.03-1.93H9.15a2.257,2.257,0,0,0-4.3,0H3.56a.5.5,0,0,1-.5-.5V6.565a1.5,1.5,0,0,1,1.5-1.5h6.97a1.5,1.5,0,0,1,1.5,1.5ZM17,18.935a1.25,1.25,0,1,1,1.25-1.25A1.25,1.25,0,0,1,17,18.935Zm3.94-2.43a.5.5,0,0,1-.5.5H19.15a2.257,2.257,0,0,0-4.3,0h-.82v-7.3h4.38a1.516,1.516,0,0,1,1.22.63l1.03,1.43a1.527,1.527,0,0,1,.28.87Z"></path><path d="M18.029,12.205h-2a.5.5,0,0,1,0-1h2a.5.5,0,0,1,0,1Z"></path></g></g></svg>
+      <span>Fast &amp; Discreet<br>Shipping</span>
+    </div>
+  </div>
   </div>
 </div>`;
 
@@ -331,9 +480,16 @@ function mountCheckoutUI() {
   console.log("[CO] mountCheckoutUI — HTML injected ✓");
 
   const wrap = document.getElementById("prog-plans");
-  function render() { if (!wrap?.isConnected) return; wrap.innerHTML = plans.map(planHTML).join(""); }
+
+  function render() {
+    if (!wrap?.isConnected) return;
+    wrap.innerHTML = plans.map(planHTML).join("");
+  }
+
   function initializePlans() {
-    const cards = document.querySelectorAll("ul.relative.mt-5.flex.flex-col.gap-3 > li");
+    const cards = document.querySelectorAll(
+      "ul.relative.mt-5.flex.flex-col.gap-3 > li",
+    );
     console.log("[CO] initializePlans — cards found:", cards.length);
     if (cards.length < 4) return false;
     domCards = [...cards];
@@ -341,220 +497,263 @@ function mountCheckoutUI() {
     render();
     return true;
   }
+
   if (!initializePlans()) {
-    plansObserver = new MutationObserver(() => { if (initializePlans()) { plansObserver.disconnect(); plansObserver = null; } });
+    plansObserver = new MutationObserver(() => {
+      if (initializePlans()) {
+        plansObserver.disconnect();
+        plansObserver = null;
+      }
+    });
     plansObserver.observe(document.body, { childList: true, subtree: true });
     addObserver(plansObserver);
   }
 
-  const indexMap  = { quarterly: 0, sixmonth: 1, twelvemonth: 2, monthly: 3 };
+  const indexMap = { quarterly: 0, sixmonth: 1, twelvemonth: 2, monthly: 3 };
   const idByIndex = ["quarterly", "sixmonth", "twelvemonth", "monthly"];
 
   function selectPlan(id) {
     if (!isMounted) return;
     console.log("[CO] selectPlan:", id, "→ domCards[" + indexMap[id] + "]");
     plans.forEach((p) => (p.selected = p.id === id));
-    wrap.querySelectorAll(".prog-plan-card").forEach((c) => { const on = c.dataset.id === id; c.classList.toggle("prog-selected", on); c.setAttribute("aria-checked", on); });
+    wrap.querySelectorAll(".prog-plan-card").forEach((c) => {
+      const on = c.dataset.id === id;
+      c.classList.toggle("prog-selected", on);
+      c.setAttribute("aria-checked", on);
+    });
     const domCard = domCards[indexMap[id]];
-    if (domCard) domCard.click(); else console.warn("[CO] domCard not found for id:", id);
+    if (domCard) domCard.click();
+    else console.warn("[CO] domCard not found for id:", id);
   }
 
   const baskSelectionObserver = new MutationObserver(() => {
-    const selectedIdx = domCards.findIndex((c) => c.classList.contains("border-2"));
+    const selectedIdx = domCards.findIndex((c) =>
+      c.classList.contains("border-2"),
+    );
     if (selectedIdx === -1) return;
     const id = idByIndex[selectedIdx];
     const currentId = plans.find((p) => p.selected)?.id;
-    if (id && id !== currentId) { console.log("[CO] Bask selection changed → syncing custom UI to:", id); plans.forEach((p) => (p.selected = p.id === id)); render(); }
+    if (id && id !== currentId) {
+      console.log("[CO] Bask selection changed → syncing custom UI to:", id);
+      plans.forEach((p) => (p.selected = p.id === id));
+      render();
+    }
   });
-  domCards.forEach((c) => baskSelectionObserver.observe(c, { attributes: true, attributeFilter: ["class"] }));
+  domCards.forEach((c) =>
+    baskSelectionObserver.observe(c, {
+      attributes: true,
+      attributeFilter: ["class"],
+    }),
+  );
   addObserver(baskSelectionObserver);
 
-  addListener(wrap, "click", (e) => { const c = e.target.closest(".prog-plan-card"); if (c) selectPlan(c.dataset.id); });
-  addListener(wrap, "keydown", (e) => { if (e.key === " " || e.key === "Enter") { const c = e.target.closest(".prog-plan-card"); if (c) { e.preventDefault(); selectPlan(c.dataset.id); } } });
+  addListener(wrap, "click", (e) => {
+    const c = e.target.closest(".prog-plan-card");
+    if (c) selectPlan(c.dataset.id);
+  });
+  addListener(wrap, "keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") {
+      const c = e.target.closest(".prog-plan-card");
+      if (c) {
+        e.preventDefault();
+        selectPlan(c.dataset.id);
+      }
+    }
+  });
 
   document.getElementById("stars").innerHTML = STAR.repeat(5);
 
-  // ── Move Stripe payment element into our slot ──────────────────────────────
+  // ── Move Stripe payment element into our slot ────────────────────────────
   function movePaymentIntoSlot() {
     const paymentEl = document.getElementById("payment-element");
     const slot = document.getElementById("tzmd-payment-box");
     if (!paymentEl || !slot) return false;
     if (slot.contains(paymentEl)) return true;
+
     paymentElOriginalParent = paymentEl.parentNode;
     paymentElOriginalNext = paymentEl.nextSibling;
+
     slot.innerHTML = "";
     slot.appendChild(paymentEl);
     console.log("[CO] payment element moved into tzmd-payment-slot ✓");
     return true;
   }
+
   if (!movePaymentIntoSlot()) {
-    const paymentSlotObserver = new MutationObserver(() => { if (movePaymentIntoSlot()) paymentSlotObserver.disconnect(); });
-    paymentSlotObserver.observe(document.body, { childList: true, subtree: true });
+    const paymentSlotObserver = new MutationObserver(() => {
+      if (movePaymentIntoSlot()) paymentSlotObserver.disconnect();
+    });
+    paymentSlotObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
     addObserver(paymentSlotObserver);
   }
 
-  // ── Submit button ──────────────────────────────────────────────────────────
+  // ── Submit button → triggers Bask's hidden form submit ──────────────────
   addListener(document.getElementById("tzmd-submit-btn"), "click", () => {
     console.log("[CO] tzmd-submit-btn clicked → triggering Bask submit");
-    const baskBtn = [...document.querySelectorAll("button[type='submit']")].find((b) => b.textContent.includes("Start My Doctor Review"));
-    if (baskBtn) baskBtn.click(); else console.warn("[CO] Bask submit button not found");
+    const baskBtn = [
+      ...document.querySelectorAll("button[type='submit']"),
+    ].find((b) => b.textContent.includes("Start My Doctor Review"));
+    if (baskBtn) baskBtn.click();
+    else console.warn("[CO] Bask submit button not found");
   });
 
   function syncSubmitButtonState() {
     const customBtn = document.getElementById("tzmd-submit-btn");
     if (!customBtn) return;
+
     const attachObserver = () => {
-      const baskBtn = [...document.querySelectorAll("button[type='submit']")].find((b) => b.textContent.includes("Start My Doctor Review"));
+      const baskBtn = [
+        ...document.querySelectorAll("button[type='submit']"),
+      ].find((b) => b.textContent.includes("Start My Doctor Review"));
+
       if (!baskBtn) return false;
+
       const updateState = () => {
-        const isLoading = baskBtn.disabled || !!baskBtn.querySelector(".animate-spin");
+        const isLoading =
+          baskBtn.disabled || !!baskBtn.querySelector(".animate-spin");
+
         customBtn.disabled = isLoading;
+
         customBtn.innerHTML = isLoading
-          ? `<div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-neutral-100 border-t-neutral-300"></div>`
-          : `<svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>Start My Treatment Plan`;
+          ? `
+          <div class="inline-block h-4 w-4 animate-spin rounded-full border-4 border-neutral-100 border-t-neutral-300"></div>
+         
+        `
+          : `
+          <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>
+          Start My Treatment Plan
+        `;
       };
+
       updateState();
+
       const observer = new MutationObserver(updateState);
-      observer.observe(baskBtn, { attributes: true, childList: true, subtree: true, attributeFilter: ["disabled", "class"] });
+
+      observer.observe(baskBtn, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+        attributeFilter: ["disabled", "class"],
+      });
+
       addObserver(observer);
+
       return true;
     };
+
     if (!attachObserver()) {
-      const waitForButton = new MutationObserver(() => { if (attachObserver()) waitForButton.disconnect(); });
-      waitForButton.observe(document.body, { childList: true, subtree: true });
+      const waitForButton = new MutationObserver(() => {
+        if (attachObserver()) {
+          waitForButton.disconnect();
+        }
+      });
+
+      waitForButton.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+
       addObserver(waitForButton);
     }
   }
   syncSubmitButtonState();
-
-  // ── Coupon code ────────────────────────────────────────────────────────────
-  function setupCouponCode() {
-    const ourInput = document.getElementById("tzmd-coupon-input");
-    const ourBtn   = document.getElementById("tzmd-coupon-btn");
-    const ourMsg   = document.getElementById("tzmd-coupon-msg");
-    if (!ourInput || !ourBtn) return;
-
-    function getBaskInput() { return document.querySelector('input[placeholder="Discount code"]'); }
-    function getBaskApplyBtn() {
-      const inp = getBaskInput();
-      return inp?.parentElement?.querySelector('button[type="button"]') || null;
-    }
-    function setMsg(text, state) {
-      ourMsg.textContent = text;
-      ourMsg.className = "co-coupon-msg" + (state ? " " + state : "");
-      ourInput.className = "co-coupon-input" + (state ? " " + state : "");
-    }
-
-    addListener(ourBtn, "click", () => {
-      const code = ourInput.value.trim().toUpperCase();
-      if (!code) { setMsg("Please enter a discount code.", "tzmd-error"); return; }
-
-      const baskInput = getBaskInput();
-      const baskBtn   = getBaskApplyBtn();
-      if (!baskInput || !baskBtn) { setMsg("Unable to apply code. Please try again.", "tzmd-error"); return; }
-
-      // Push value into React's controlled input
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      setter.call(baskInput, code);
-      baskInput.dispatchEvent(new Event("input",  { bubbles: true }));
-      baskInput.dispatchEvent(new Event("change", { bubbles: true }));
-
-      ourBtn.disabled = true;
-      setMsg("Applying…", "");
-
-      // Watch Bask's discount area for result
-      const watchRoot = baskInput.closest('[class*="gap"]') || baskInput.closest("div") || document.body;
-      let settled = false;
-      const resultObs = new MutationObserver(() => {
-        if (settled) return;
-        const applyBtn = getBaskApplyBtn();
-        // Bask disables Apply button when a valid code is accepted
-        if (applyBtn?.disabled) {
-          settled = true; resultObs.disconnect();
-          setMsg("Code applied ✓", "tzmd-applied");
-          ourBtn.textContent = "Applied";
-          ourBtn.disabled = true;
-          return;
-        }
-        // Check for an error message near Bask's input
-        const errEl = watchRoot.querySelector('[style*="EF4444"], [class*="error"]');
-        if (errEl?.textContent?.trim()) {
-          settled = true; resultObs.disconnect();
-          setMsg(errEl.textContent.trim(), "tzmd-error");
-          ourBtn.disabled = false;
-        }
-      });
-      resultObs.observe(watchRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled","style","class"] });
-      addObserver(resultObs);
-
-      // Trigger Bask's Apply after React processes the value
-      setTimeout(() => {
-        const freshBtn = getBaskApplyBtn();
-        if (freshBtn && !freshBtn.disabled) freshBtn.click();
-        // Re-enable after 5s if no feedback received
-        setTimeout(() => {
-          if (!settled) {
-            settled = true; resultObs.disconnect();
-            ourBtn.disabled = false;
-            if (!ourMsg.classList.contains("tzmd-applied")) {
-              setMsg("Invalid or expired code.", "tzmd-error");
-            }
-          }
-        }, 5000);
-      }, 200);
-    });
-
-    // Enter key = Apply
-    addListener(ourInput, "keydown", (e) => { if (e.key === "Enter") ourBtn.click(); });
-  }
-  setupCouponCode();
 }
 
 // ─── UNMOUNT ──────────────────────────────────────────────────────────────────
 function unmountCheckoutUI() {
-  console.log("[CO] unmountCheckoutUI — isMounted:", isMounted, "activePage:", window.__TZMD__.activePage);
+  console.log(
+    "[CO] unmountCheckoutUI — isMounted:",
+    isMounted,
+    "activePage:",
+    window.__TZMD__.activePage,
+  );
   restoreOriginalSection();
+  // Restore Stripe payment element to its original DOM position BEFORE
+  // clearing the container — otherwise the node is destroyed with innerHTML=""
   if (paymentElOriginalParent) {
     const paymentEl = document.getElementById("payment-element");
-    if (paymentEl) { try { paymentElOriginalParent.insertBefore(paymentEl, paymentElOriginalNext); console.log("[CO] payment element restored ✓"); } catch (e) { /* original parent may be gone */ } }
+    if (paymentEl) {
+      try {
+        paymentElOriginalParent.insertBefore(paymentEl, paymentElOriginalNext);
+        console.log("[CO] payment element restored ✓");
+      } catch (e) {
+        /* original parent may be gone */
+      }
+    }
     paymentElOriginalParent = null;
     paymentElOriginalNext = null;
   }
+
   const container = document.getElementById("script-container");
-  if (!container) { console.log("[CO] unmount — no container"); return; }
+  if (!container) {
+    console.log("[CO] unmount — no container");
+    return;
+  }
+
   console.log("[CO] unmount — clearing container");
   container.innerHTML = "";
   isMounted = false;
   plans = [];
   domCards = [];
-  if (plansObserver) { plansObserver.disconnect(); plansObserver = null; }
+
+  if (plansObserver) {
+    plansObserver.disconnect();
+    plansObserver = null;
+  }
   console.log("[CO] unmount complete");
 }
 
 // ─── PAGE DETECTION ───────────────────────────────────────────────────────────
-function isCheckoutPage() { return [...document.querySelectorAll("span")].some((el) => el.textContent.trim() === "Choose Your Program"); }
+function isCheckoutPage() {
+  return [...document.querySelectorAll("span")].some(
+    (el) => el.textContent.trim() === "Choose Your Program",
+  );
+}
 
 function syncCheckoutUI() {
   const checkout = isCheckoutPage();
-  console.log("[CO] syncCheckoutUI — isCheckoutPage:", checkout, "activePage:", window.__TZMD__.activePage, "isMounted:", isMounted);
-  if (checkout) mountCheckoutUI(); else unmountCheckoutUI();
+  console.log(
+    "[CO] syncCheckoutUI — isCheckoutPage:",
+    checkout,
+    "activePage:",
+    window.__TZMD__.activePage,
+    "isMounted:",
+    isMounted,
+  );
+  if (checkout) mountCheckoutUI();
+  else unmountCheckoutUI();
 }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 let syncTimer = null;
+
 function debouncedSync() {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     const currentPage = window.__TZMD__?.activePage;
     console.log("[CO] debouncedSync fired — currentPage:", currentPage);
-    if (currentPage !== "checkout") { console.log("[CO] debouncedSync ABORTED — not checkout page, activePage:", currentPage); return; }
+    if (currentPage !== "checkout") {
+      console.log(
+        "[CO] debouncedSync ABORTED — not checkout page, activePage:",
+        currentPage,
+      );
+      return;
+    }
     syncCheckoutUI();
   }, 150);
 }
 
 console.log("[CO] running initial syncCheckoutUI");
 syncCheckoutUI();
+
 const pageObserver = new MutationObserver(debouncedSync);
 pageObserver.observe(document.body, { childList: true, subtree: true });
 addObserver(pageObserver);
-console.log("[CO] script fully initialized ✓ activePage:", window.__TZMD__.activePage);
+
+console.log(
+  "[CO] script fully initialized ✓ activePage:",
+  window.__TZMD__.activePage,
+);
