@@ -433,6 +433,7 @@ function mountCheckoutUI() {
 .co-badge svg { width: 24px; height: 24px; color: var(--prog-green); flex: none; }
 .co-badge span { font-size: 8px; font-weight: 700; color: var(--prog-ink); text-align: left; line-height: 1.3; }
 .co-badge-div { width: 1px; height: 36px; background: #EAEAE7; flex: none; }
+#tzmd-sticky-bar {order:99999999999;margin-top:-33px !important; z-index: 9999;}
 </style>
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
@@ -663,8 +664,8 @@ function mountCheckoutUI() {
       if (document.getElementById(STICKY_ID)) return;
       const btn = findBtn();
       if (!btn) return;
-      const target = btn.closest("div.flex.w-full.flex-col.items-center.flex-grow.pb-4")
-        || document.querySelector("div.flex.w-full.flex-col.items-center.flex-grow.pb-4");
+      const target = btn.closest("section.relative.flex.w-full.shrink-0.flex-grow.flex-col")
+        || document.querySelector("section.relative.flex.w-full.shrink-0.flex-grow.flex-col");
       if (!target) return;
       const tmp = document.createElement("div");
       tmp.innerHTML = STICKY_HTML;
@@ -692,6 +693,7 @@ function unmountCheckoutUI() {
     window.__TZMD__.activePage,
   );
   restoreOriginalSection();
+  document.getElementById("tzmd-sticky-bar")?.remove();
 
   const container = document.getElementById("script-container");
   if (!container) {
@@ -701,7 +703,6 @@ function unmountCheckoutUI() {
 
   console.log("[CO] unmount — clearing container");
   container.innerHTML = "";
-  document.getElementById("tzmd-sticky-bar")?.remove();
   isMounted = false;
   plans = [];
   domCards = [];
@@ -715,8 +716,8 @@ function unmountCheckoutUI() {
 
 // ─── PAGE DETECTION ───────────────────────────────────────────────────────────
 function isCheckoutPage() {
-  return !![...document.querySelectorAll("h4.font-velasans-gx")].find(
-    (h) => h.textContent.trim() === "Card Details"
+  return !![...document.querySelectorAll("span.font-brand-header")].find(
+    (el) => el.textContent.trim() === "Total (If approved):"
   );
 }
 
@@ -738,17 +739,16 @@ function syncCheckoutUI() {
 let syncTimer = null;
 
 function debouncedSync() {
+  // Unmount immediately — don't wait for debounce
+  if (isMounted && !isCheckoutPage()) {
+    unmountCheckoutUI();
+    return;
+  }
+  // Debounce mount only, to avoid thrashing during React's initial render
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     const currentPage = window.__TZMD__?.activePage;
-    console.log("[CO] debouncedSync fired — currentPage:", currentPage);
-    if (currentPage !== "checkout") {
-      console.log(
-        "[CO] debouncedSync ABORTED — not checkout page, activePage:",
-        currentPage,
-      );
-      return;
-    }
+    if (currentPage !== "checkout") return;
     syncCheckoutUI();
   }, 150);
 }
