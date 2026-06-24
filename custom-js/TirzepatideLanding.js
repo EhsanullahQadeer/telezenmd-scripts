@@ -210,8 +210,9 @@ const LP_CSS = `
     width: 100%;
     margin-top: 20px;
     border-radius: 12px;
-    object-fit: cover;
     padding: 0 25px;
+    position: relative;
+    z-index: 99999999;
   }
   @media (max-width: 430px) {
     .lp-hero    { font-size: 11vw; }
