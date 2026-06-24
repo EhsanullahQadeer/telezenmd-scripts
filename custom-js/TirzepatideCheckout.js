@@ -1,7 +1,7 @@
 // ─── TZMD LIFECYCLE ENGINE ────────────────────────────────────────────────────
 window.__TZMD__ ??= { activePage: null, cleanup: {} };
 
-window.__TZMD__.createPage ??= function createPage(PAGE_ID) {
+window.__TZMD__.createPage ??= function createPage(PAGE_ID, onDestroy) {
   const registry = window.__TZMD__;
   if (registry.activePage === PAGE_ID) {
     console.log(`[TZMD] ${PAGE_ID} already initialized — skipping`);
@@ -36,10 +36,7 @@ window.__TZMD__.createPage ??= function createPage(PAGE_ID) {
 
     console.log(`[TZMD] ${PAGE_ID} destroy`);
 
-    // page specific cleanup
-    if (PAGE_ID === "checkout") {
-      unmountCheckoutUI();
-    }
+    if (typeof onDestroy === "function") onDestroy();
 
     delete registry.cleanup[PAGE_ID];
 
@@ -164,7 +161,7 @@ function restoreOriginalSection() {
   hiddenSection = null;
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const page = window.__TZMD__.createPage("checkout");
+const page = window.__TZMD__.createPage("checkout", () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
   return;

@@ -1,3 +1,45 @@
+// ─── TZMD LIFECYCLE ENGINE ────────────────────────────────────────────────────
+window.__TZMD__ ??= { activePage: null, cleanup: {} };
+
+window.__TZMD__.createPage ??= function createPage(PAGE_ID, onDestroy) {
+  const registry = window.__TZMD__;
+  if (registry.activePage === PAGE_ID) {
+    console.log(`[TZMD] ${PAGE_ID} already initialized — skipping`);
+    return null;
+  }
+  const previousPage = registry.activePage;
+  if (previousPage && registry.cleanup[previousPage]) {
+    console.log(`[TZMD] destroying previous page: ${previousPage}`);
+    registry.cleanup[previousPage]();
+  }
+  registry.activePage = PAGE_ID;
+  let destroyed = false;
+  const disposables = { observers: [], timers: [], listeners: [] };
+  function addObserver(o) { disposables.observers.push(o); }
+  function addTimer(t)    { disposables.timers.push(t); }
+  function addListener(el, ev, fn, opts) {
+    el.addEventListener(ev, fn, opts);
+    disposables.listeners.push({ element: el, event: ev, handler: fn, options: opts });
+  }
+  function destroy() {
+    if (destroyed) return;
+    destroyed = true;
+    console.log(`[TZMD] ${PAGE_ID} destroy`);
+    if (typeof onDestroy === "function") onDestroy();
+    delete registry.cleanup[PAGE_ID];
+    if (registry.activePage === PAGE_ID) registry.activePage = null;
+    disposables.observers.forEach((o) => o.disconnect());
+    disposables.timers.forEach((t) => clearTimeout(t));
+    disposables.listeners.forEach(({ element, event, handler, options }) =>
+      element.removeEventListener(event, handler, options));
+    disposables.observers = [];
+    disposables.timers = [];
+    disposables.listeners = [];
+  }
+  registry.cleanup[PAGE_ID] = destroy;
+  return { addObserver, addTimer, addListener, destroy };
+};
+
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 const LP_CONFIG = {
@@ -42,11 +84,11 @@ const LP_CONFIG = {
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 
 const LP_ICONS = {
-  clock: `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="15"/><path d="M24 24 V14"/><path d="M24 24 L31 29"/></svg>`,
+  clock: `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="15"/><path d="M24 24 V14"/><path d="M24 24 L31 29"/></svg>`,
 
   physician: `<img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1782327343/physician_rymyk7.png" alt="Physician Reviewed" style="width:36px;height:36px;object-fit:contain;">`,
 
-  card: `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="14" width="30" height="20" rx="3.2"/><line x1="8" y1="20.5" x2="38" y2="20.5"/><rect x="29" y="28" width="13" height="10.5" rx="2.2" fill="var(--lp-circle-bg)"/><path d="M32 28 V25.7 A3.5 3.5 0 0 1 39 25.7 V28"/></svg>`,
+  card: `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="14" width="30" height="20" rx="3.2"/><line x1="8" y1="20.5" x2="38" y2="20.5"/><rect x="29" y="28" width="13" height="10.5" rx="2.2" fill="var(--lp-circle-bg)"/><path d="M32 28 V25.7 A3.5 3.5 0 0 1 39 25.7 V28"/></svg>`,
 
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 L9 18 L20 5"/></svg>`,
 
@@ -75,100 +117,105 @@ const LP_CSS = `
   }
   .lp-page {
     margin: 0 auto;
-    font-family: 'Poppins', sans-serif;
     color: var(--lp-black);
-    -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     box-sizing: border-box;
   }
   .lp-page *, .lp-page *::before, .lp-page *::after { box-sizing: border-box; margin: 0; padding: 0; }
   .lp-hero {
-    font-family: 'Playfair Display', serif;
     font-weight: 800;
     line-height: 1.0;
-    letter-spacing: -1px;
-    font-size: 58px;
-    margin-bottom: 26px;
+    letter-spacing: -0.5px;
+    font-size: 46px;
+    margin-bottom: 18px;
   }
   .lp-hero .lp-green { color: var(--lp-primary); display: block; white-space: nowrap; }
   .lp-hero .lp-dark  { color: var(--lp-black);   display: block; white-space: nowrap; }
   .lp-subhead {
-    font-size: 22px;
+    font-size: 17px;
     font-weight: 400;
-    line-height: 1.32;
+    line-height: 1.4;
     color: var(--lp-black);
-    margin-bottom: 40px;
+    margin-bottom: 26px;
   }
   .lp-subhead .lp-accent { color: var(--lp-medium); font-weight: 600; }
   .lp-features {
     display: grid;
     grid-template-columns: 0.8fr 1.1fr 1.1fr;
-    margin-bottom: 42px;
+    margin-bottom: 26px;
   }
   .lp-feature {
-    padding: 0 7px;
+    padding: 0 5px;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
   }
-  .lp-feature.lp-left { align-items: flex-start; text-align: left; padding-left: 0; padding-right: 10px; }
-  .lp-feature + .lp-feature { border-left: 1px solid var(--lp-divider); padding-left: 14px; }
+  .lp-feature.lp-left { align-items: flex-start; text-align: left; padding-left: 0; padding-right: 8px; }
+  .lp-feature + .lp-feature { border-left: 1px solid var(--lp-divider); padding-left: 10px; }
   .lp-icon-circle {
-    width: 72px; height: 72px; border-radius: 50%;
+    width: 52px; height: 52px; border-radius: 50%;
     background: var(--lp-circle-bg);
     display: flex; align-items: center; justify-content: center;
     color: var(--lp-primary);
-    margin-bottom: 16px;
+    margin-bottom: 10px;
   }
-  .lp-icon-circle svg { width: 36px; height: 36px; }
-  .lp-feature-title { color: var(--lp-medium); font-weight: 600; font-size: 16px; line-height: 1.22; margin-bottom: 5px; }
-  .lp-feature-sub   { color: var(--lp-black);  font-weight: 400; font-size: 15px; line-height: 1.3; }
+  .lp-icon-circle svg { width: 50px; height: 50px; }
+  .lp-feature-title { color: var(--lp-medium); font-weight: 600; font-size: 14px; line-height: 1.22; margin-bottom: 3px; }
+  .lp-feature-sub   { color: var(--lp-black);  font-weight: 400; font-size: 13px; line-height: 1.3; }
   .lp-journey {
     background: var(--lp-box-bg);
-    border-radius: 22px;
-    padding: 30px 30px 30px 26px;
+    border-radius: 16px;
+    padding: 20px 20px 20px 16px;
     display: flex;
     align-items: center;
-    gap: 22px;
-    margin-bottom: 30px;
+    gap: 14px;
+    margin-bottom: 20px;
   }
   .lp-shield { flex: 0 0 auto; color: var(--lp-primary); }
-  .lp-shield svg { width: 92px; height: auto; display: block; }
-  .lp-journey-head { color: var(--lp-medium); font-weight: 700; font-size: 18px; margin-bottom: 14px; }
+  .lp-shield svg { width: 62px; height: auto; display: block; }
+  .lp-journey-head { color: var(--lp-medium); font-weight: 700; font-size: 15px; margin-bottom: 8px; }
   .lp-journey-list { list-style: none; }
   .lp-journey-list li {
-    display: flex; align-items: center; gap: 13px;
-    font-size: 18px; font-weight: 400; color: var(--lp-black);
-    line-height: 1.2; padding: 5px 0;
+    display: flex; align-items: center; gap: 9px;
+    font-size: 15px; font-weight: 400; color: var(--lp-black);
+    line-height: 1.2; padding: 3px 0;
   }
   .lp-check { flex: 0 0 auto; color: var(--lp-medium); }
-  .lp-check svg { width: 18px; height: 18px; display: block; }
+  .lp-check svg { width: 14px; height: 14px; display: block; }
   .lp-cta {
     position: relative; width: 100%; border: none; cursor: pointer;
     background: var(--lp-black); color: var(--lp-white);
-    border-radius: 48px; padding: 24px 28px;
-    font-family: 'Poppins', sans-serif; font-weight: 600;
-    font-size: 16.5px; letter-spacing: 0.8px; text-transform: uppercase;
+    border-radius: 40px; padding: 16px 22px;
+    font-weight: 600;
+    font-size: 15px; letter-spacing: 0.6px; text-transform: uppercase;
     text-align: center; transition: background .18s ease;
   }
   .lp-cta:hover    { background: var(--button-hover-color); }
   .lp-cta:disabled { background: var(--button-disabled-color); cursor: not-allowed; }
   .lp-cta:focus-visible { outline: 3px solid var(--lp-sage); outline-offset: 3px; }
   .lp-cta .lp-chevron {
-    position: absolute; right: 28px; top: 50%;
+    position: absolute; right: 22px; top: 50%;
     transform: translateY(-50%); display: flex;
   }
-  .lp-cta .lp-chevron svg { width: 15px; height: 24px; }
+  .lp-cta .lp-chevron svg { width: 12px; height: 20px; }
   .lp-secure {
     display: flex; align-items: center; justify-content: center;
-    gap: 10px; margin-top: 18px; font-size: 15px;
+    gap: 8px; margin-top: 14px; font-size: 13px;
     color: #3a3a35; font-weight: 400;
   }
-  .lp-secure svg { width: 15px; height: 18px; color: var(--lp-primary); }
+  .lp-secure svg { width: 12px; height: 15px; color: var(--lp-primary); }
+  .lp-product-img {
+    display: block;
+    width: 100%;
+    margin-top: 20px;
+    border-radius: 12px;
+    object-fit: cover;
+    padding: 0 25px;
+  }
   @media (max-width: 430px) {
-    .lp-hero    { font-size: 13.8vw; }
-    .lp-subhead { font-size: 5.2vw; }
+    .lp-hero    { font-size: 11vw; }
+    .lp-subhead { font-size: 4.4vw; }
   }
 `;
 
@@ -218,11 +265,78 @@ function buildLandingHTML(cfg, icons) {
     ${cfg.secureText}
   </div>
 
+  <img class="lp-product-img" src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1782330666/info-banner_ifobbh.png" alt="GLP-1 Treatment Products">
+
 </main>`;
 }
 
-// ─── INJECT ───────────────────────────────────────────────────────────────────
+// ─── LIFECYCLE ────────────────────────────────────────────────────────────────
+console.log("[LP] script start — activePage:", window.__TZMD__.activePage);
 
-const container = document.getElementById('script-container');
-if (!container) return;
-container.innerHTML = buildLandingHTML(LP_CONFIG, LP_ICONS);
+const lpPage = window.__TZMD__.createPage("landing", () => unmountLandingUI());
+if (!lpPage) {
+  console.log("[LP] already active or bailing");
+  return;
+}
+const { addObserver, addListener, destroy } = lpPage;
+console.log("[LP] createPage success");
+
+let lpMounted = false;
+let lpHiddenDiv = null;
+
+function mountLandingUI() {
+  if (lpMounted) return;
+  const container = document.getElementById("script-container");
+  if (!container) { console.log("[LP] no script-container"); return; }
+
+  // Hide 2nd child immediately
+  const orig = container.nextElementSibling;
+  if (orig && !lpHiddenDiv) {
+    orig.classList.add("hidden");
+    lpHiddenDiv = orig;
+    console.log("[LP] original content hidden ✓");
+  }
+
+  container.innerHTML = buildLandingHTML(LP_CONFIG, LP_ICONS);
+  lpMounted = true;
+  console.log("[LP] mounted ✓");
+
+  // Wire our CTA → Bask's hidden Next button
+  const ctaBtn = container.querySelector(".lp-cta");
+  if (ctaBtn) {
+    addListener(ctaBtn, "click", () => {
+      const baskNext = [...document.querySelectorAll('button[type="button"]')]
+        .find((b) => b.textContent.trim().startsWith("Next"));
+      if (baskNext) {
+        console.log("[LP] CTA clicked → triggering Bask Next");
+        baskNext.click();
+      } else {
+        console.warn("[LP] Bask Next button not found");
+      }
+    });
+  }
+}
+
+function unmountLandingUI() {
+  if (lpHiddenDiv) {
+    lpHiddenDiv.classList.remove("hidden");
+    lpHiddenDiv = null;
+    console.log("[LP] original content restored ✓");
+  }
+  const container = document.getElementById("script-container");
+  if (container) container.innerHTML = "";
+  lpMounted = false;
+  console.log("[LP] unmounted ✓");
+}
+
+// Boot
+mountLandingUI();
+
+// Watch for SPA navigation away (script-container leaves DOM)
+const lpObserver = new MutationObserver(() => {
+  if (lpMounted && !document.getElementById("script-container")) {
+    destroy();
+  }
+});
+lpObserver.observe(document.body, { childList: true, subtree: true });
+addObserver(lpObserver);
