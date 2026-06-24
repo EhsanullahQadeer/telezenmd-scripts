@@ -117,6 +117,7 @@ function applyBaskHides(section) {
 }
 
 function hideOriginalSection() {
+  if (hiddenSection) return;
   const container = document.getElementById("script-container");
   const next = container?.nextElementSibling;
   if (!next) return;
@@ -744,13 +745,15 @@ function debouncedSync() {
     unmountCheckoutUI();
     return;
   }
+  // Hide immediately to prevent flash — full mount is debounced below
+  if (isCheckoutPage()) hideOriginalSection();
   // Debounce mount only, to avoid thrashing during React's initial render
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
+  // clearTimeout(syncTimer);
+  // syncTimer = setTimeout(() => {
     const currentPage = window.__TZMD__?.activePage;
     if (currentPage !== "checkout") return;
     syncCheckoutUI();
-  }, 150);
+  // }, 150);
 }
 
 console.log("[CO] running initial syncCheckoutUI");

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lose Weight. Keep It Off.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#3D5C2A;
+    --medium:#6B8F4E;
+    --sage:#A8BC8A;
+    --black:#1C1C1A;
+    --white:#FFFFFF;
+    --cream:#F6F4ED;
+    --circle-bg:#ECEDE3;
+    --box-bg:#ECECE7;
+    --divider:#D9D9CF;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+
+  html,body{
+    background:var(--cream);
+    color:var(--black);
+    font-family:'Poppins',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+
+  .page{
+    margin:0 auto;
+    padding:30px 26px 34px;
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    font-family:'Playfair Display',serif;
+    font-weight:800;
+    line-height:1.0;
+    letter-spacing:-1px;
+    font-size:58px;
+    margin-bottom:26px;
+  }
+  .hero .green{color:var(--primary);display:block;white-space:nowrap;}
+  .hero .dark{color:var(--black);display:block;white-space:nowrap;}
+
+  .subhead{
+    font-size:22px;
+    font-weight:400;
+    line-height:1.32;
+    color:var(--black);
+    margin-bottom:40px;
+  }
+  .subhead .accent{color:var(--medium);font-weight:600;}
+
+  /* ---------- Feature row ---------- */
+  .features{
+    display:grid;
+    grid-template-columns:0.8fr 1.1fr 1.1fr;
+    margin-bottom:42px;
+  }
+  .feature{
+    padding:0 7px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+  }
+  .feature.left{
+    align-items:flex-start;
+    text-align:left;
+    padding-left:0;
+    padding-right:10px;
+  }
+  .feature + .feature{
+    border-left:1px solid var(--divider);
+    padding-left:14px;
+  }
+  .icon-circle{
+    width:72px;height:72px;border-radius:50%;
+    background:var(--circle-bg);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--primary);
+    margin-bottom:16px;
+  }
+  .icon-circle svg{width:36px;height:36px;}
+  .feature-title{
+    color:var(--medium);
+    font-weight:600;
+    font-size:16px;
+    line-height:1.22;
+    margin-bottom:5px;
+  }
+  .feature-sub{
+    color:var(--black);
+    font-weight:400;
+    font-size:15px;
+    line-height:1.3;
+  }
+
+  /* ---------- Journey box ---------- */
+  .journey{
+    background:var(--box-bg);
+    border-radius:22px;
+    padding:30px 30px 30px 26px;
+    display:flex;
+    align-items:center;
+    gap:22px;
+    margin-bottom:30px;
+  }
+  .shield{flex:0 0 auto;color:var(--primary);}
+  .shield svg{width:92px;height:auto;display:block;}
+  .journey-head{
+    color:var(--medium);
+    font-weight:700;
+    font-size:18px;
+    margin-bottom:14px;
+  }
+  .journey-list{list-style:none;}
+  .journey-list li{
+    display:flex;
+    align-items:center;
+    gap:13px;
+    font-size:18px;
+    font-weight:400;
+    color:var(--black);
+    line-height:1.2;
+    padding:5px 0;
+  }
+  .check{flex:0 0 auto;color:var(--medium);}
+  .check svg{width:18px;height:18px;display:block;}
+
+  /* ---------- CTA ---------- */
+  .cta{
+    position:relative;
+    width:100%;
+    border:none;
+    cursor:pointer;
+    background:var(--primary);
+    color:var(--white);
+    border-radius:48px;
+    padding:24px 28px;
+    font-family:'Poppins',sans-serif;
+    font-weight:600;
+    font-size:16.5px;
+    letter-spacing:0.8px;
+    text-transform:uppercase;
+    text-align:center;
+    transition:background .18s ease;
+  }
+  .cta:hover{background:#33491f;}
+  .cta:focus-visible{outline:3px solid var(--sage);outline-offset:3px;}
+  .cta .chevron{
+    position:absolute;
+    right:28px;
+    top:50%;
+    transform:translateY(-50%);
+    display:flex;
+  }
+  .cta .chevron svg{width:15px;height:24px;}
+
+  /* ---------- Secure note ---------- */
+  .secure{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:18px;
+    font-size:15px;
+    color:#3a3a35;
+    font-weight:400;
+  }
+  .secure svg{width:15px;height:18px;color:var(--primary);}
+
+  @media (max-width:430px){
+    .page{padding:26px 22px 30px;}
+    .hero{font-size:13.8vw;}
+    .subhead{font-size:5.2vw;}
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+
+    <h1 class="hero">
+      <span class="green">Lose Weight.</span>
+      <span class="dark">Keep It Off.</span>
+    </h1>
+
+    <p class="subhead">
+      Complete our <span class="accent">5-minute</span> assessment
+      to see if you qualify.
+    </p>
+
+    <!-- Feature row -->
+    <section class="features">
+      <div class="feature left">
+        <div class="icon-circle">
+          <!-- clock -->
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="24" cy="24" r="15"/>
+            <path d="M24 24 V14"/>
+            <path d="M24 24 L31 29"/>
+          </svg>
+        </div>
+        <div class="feature-title">5 Minutes</div>
+        <div class="feature-sub">Quick &amp; easy</div>
+      </div>
+
+      <div class="feature">
+        <div class="icon-circle">
+          <!-- physician -->
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="24" cy="12.5" r="6.6"/>
+            <path d="M12 38 C12 29.5 17.5 25 24 25 C30.5 25 36 29.5 36 38"/>
+            <path d="M20 25.6 L24 31 L28 25.6"/>
+            <path d="M16.5 26 V33.2 C16.5 36.8 20 39.2 23.6 38.2"/>
+            <circle cx="26.2" cy="36.4" r="2.4"/>
+          </svg>
+        </div>
+        <div class="feature-title">Physician<br>Reviewed</div>
+        <div class="feature-sub">Board-certified<br>doctors</div>
+      </div>
+
+      <div class="feature">
+        <div class="icon-circle">
+          <!-- card + lock -->
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="14" width="30" height="20" rx="3.2"/>
+            <line x1="8" y1="20.5" x2="38" y2="20.5"/>
+            <rect x="29" y="28" width="13" height="10.5" rx="2.2" fill="var(--circle-bg)"/>
+            <path d="M32 28 V25.7 A3.5 3.5 0 0 1 39 25.7 V28"/>
+          </svg>
+        </div>
+        <div class="feature-title">No Charge<br>Unless Approved</div>
+        <div class="feature-sub">You pay nothing<br>unless approved</div>
+      </div>
+    </section>
+
+    <!-- Journey box -->
+    <section class="journey">
+      <div class="shield">
+        <svg viewBox="0 0 64 74" fill="none">
+          <path d="M32 3 L58 13.5 V35 C58 53 46.5 64.5 32 71 C17.5 64.5 6 53 6 35 V13.5 Z" fill="var(--primary)"/>
+          <path d="M32 9 L52.5 17.3 V35 C52.5 49.6 43.5 59.2 32 64.8 C20.5 59.2 11.5 49.6 11.5 35 V17.3 Z" fill="none" stroke="var(--sage)" stroke-width="1.6" opacity="0.85"/>
+          <path d="M22 36.5 L29 44 L43 27.5" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="journey-body">
+        <div class="journey-head">Your journey includes:</div>
+        <ul class="journey-list">
+          <li><span class="check">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 L9 18 L20 5"/></svg>
+          </span>GLP-1 Medication</li>
+          <li><span class="check">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 L9 18 L20 5"/></svg>
+          </span>Lose It For Life&trade; Program</li>
+          <li><span class="check">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 L9 18 L20 5"/></svg>
+          </span>GLP-1 Nutrition Protocol&trade;</li>
+          <li><span class="check">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 L9 18 L20 5"/></svg>
+          </span>Concierge Support</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <button class="cta">
+      Start My 5-Minute Assessment
+      <span class="chevron">
+        <svg viewBox="0 0 16 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2 L12 12 L2 22"/></svg>
+      </span>
+    </button>
+
+    <!-- Secure note -->
+    <div class="secure">
+      <svg viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="11" width="16" height="13" rx="2.4"/>
+        <path d="M7.5 11 V7 A4.5 4.5 0 0 1 16.5 7 V11"/>
+      </svg>
+      Your information is secure and confidential.
+    </div>
+
+  </main>
+</body>
+</html>
