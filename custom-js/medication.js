@@ -177,7 +177,7 @@ container.innerHTML = `
 .med-image { flex: none; width: 70px; min-height: 118px; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .med-image img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .med-content { flex: 1; min-width: 0; padding-right: 6px; }
-.med-name { font-size: 16px; font-weight: 700; color: #1c1c1a; letter-spacing: -.3px; line-height: 1.1; }
+.med-name {margin-top: 6px; font-size: 30px; font-weight: 700; color: #1c1c1a; letter-spacing: -.3px; line-height: 1.1; }
 .med-starting { font-size: 11.5px; font-weight: 500; color: #5b6470; margin-top: 6px; }
 .med-price { display: flex; align-items: flex-end; color: #3d5c2a; font-weight: 700; margin-top: 2px; line-height: 1; }
 .med-price .cur { font-size: 19px; align-self: flex-start; margin-top: 4px; margin-right: 1px; }
@@ -185,8 +185,8 @@ container.innerHTML = `
 .med-price .star { font-size: 14px; align-self: flex-start; margin-top: 2px; font-weight: 600; }
 .med-price .per { font-size: 14px; font-weight: 600; margin-left: 2px; padding-bottom: 4px; }
 .med-divider { height: 1px; background: #e7e7e4; margin: 11px 0; }
-.med-desc { font-size: 11px; line-height: 1.5; color: #3f4045; font-weight: 400; padding-right: 26px; }
-@media (max-width: 430px) { .med-content { padding-right: 4px; } .med-desc { padding-right: 24px; } }
+.med-desc { font-size: 18px; margin-top: 14px;max-width: 400px; line-height: 1.5; color: #3f4045; font-weight: 400; padding-right: 26px; }
+@media (max-width: 500px) { #tzmd-glp1-widget .med-content { padding-right: 4px; } #tzmd-glp1-widget .med-desc { font-size: 14px; padding-right: 24px; } }
 .continue-btn { position: relative; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: #1c1c1a; color: #fff; border: none; border-radius: 14px; padding: 17px 24px; margin-top: 15px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: .2px; cursor: pointer; -webkit-font-smoothing: antialiased; transition: background .15s ease, transform .05s ease; }
 .continue-btn:hover { background: #000; }
 .continue-btn:active { transform: translateY(1px); }
@@ -243,9 +243,8 @@ function cardHTML(med) {
     ${med.badge ? `<div class="med-badge">${STAR}${med.badge}</div>` : ""}
     <div class="med-radio"></div>
     <div class="med-body"><div class="med-image">${img}</div>
-    <div class="med-content"><h3 class="med-name">${med.name}</h3><div class="med-starting">Starting at</div>
-    <div class="med-price"><span class="cur">$</span><span class="amt">${med.price}</span><span class="star">*</span><span class="per">/mo</span></div>
-    <div class="med-divider"></div><p class="med-desc">${med.description}</p></div></div></div>`;
+    <div class="med-content"><h3 class="med-name">${med.name}</h3>
+    <p class="med-desc">${med.description}</p></div></div></div>`;
 }
 
 function skeletonHTML(med) {
