@@ -95,6 +95,15 @@ function findSpinbutton(label) {
 
 function tick(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ─── BAILOUT ──────────────────────────────────────────────────────────────────
+// Called when Bask's layout or API has changed and our script can no longer
+// safely target elements. Silently restores the original Bask UI and stops
+// all our observers/listeners so nothing breaks in production.
+function bailout(reason) {
+  console.warn("[BD] bailout —", reason, "— restoring original Bask UI");
+  destroy(); // triggers unmountBirthdayUI via TZMD onDestroy, then disconnects all observers/listeners
+}
+
 // Walk the React fiber tree upward from a DOM element.
 // React Aria passes DateFieldState as a prop (not a hook), so we check
 // both memoizedProps.state and the hook chain at every level.
@@ -172,33 +181,45 @@ async function syncAllSegments() {
     ["day",   bdSelection.day],
   ];
 
-  // Phase 1: apply all selected segments (year first anchors the CalendarDate).
-  for (const [seg, val] of segments) {
-    if (val === null) continue;
-    const s = freshState();
-    if (!s) { console.warn("[BD] syncAllSegments — no state for", seg); return; }
-    s.setSegment(seg, val);
-    await tick(80);
-  }
-
-  // Phase 2: verify and retry only segments that didn't land.
-  // When the "completing call" (last missing segment) fires React Aria's
-  // onChange, a subsequent setSegment can overwrite that segment via a stale
-  // displayValue. Retrying only the wrong segments avoids further overwrites.
-  for (const [seg, val] of segments) {
-    if (val === null) continue;
-    const current = Number(findSpinbutton(seg)?.getAttribute("aria-valuenow"));
-    if (current !== val) {
+  try {
+    // Phase 1: apply all selected segments (year first anchors the CalendarDate).
+    for (const [seg, val] of segments) {
+      if (val === null) continue;
       const s = freshState();
-      if (!s) break;
+      if (!s) {
+        // If the spinbutton is still in the DOM but state is unreachable,
+        // React Aria's API has changed — bail so original UI is restored.
+        if (findSpinbutton("month")) {
+          bailout("DateFieldState.setSegment not found — React Aria API may have changed");
+        }
+        return;
+      }
       s.setSegment(seg, val);
       await tick(80);
     }
-  }
 
-  console.log("[BD] syncAllSegments — month:", findSpinbutton("month")?.getAttribute("aria-valuenow"),
-    "day:", findSpinbutton("day")?.getAttribute("aria-valuenow"),
-    "year:", findSpinbutton("year")?.getAttribute("aria-valuenow"));
+    // Phase 2: verify and retry only segments that didn't land.
+    // When the "completing call" (last missing segment) fires React Aria's
+    // onChange, a subsequent setSegment can overwrite that segment via a stale
+    // displayValue. Retrying only the wrong segments avoids further overwrites.
+    for (const [seg, val] of segments) {
+      if (val === null) continue;
+      const current = Number(findSpinbutton(seg)?.getAttribute("aria-valuenow"));
+      if (current !== val) {
+        const s = freshState();
+        if (!s) break;
+        s.setSegment(seg, val);
+        await tick(80);
+      }
+    }
+
+    console.log("[BD] syncAllSegments — month:", findSpinbutton("month")?.getAttribute("aria-valuenow"),
+      "day:", findSpinbutton("day")?.getAttribute("aria-valuenow"),
+      "year:", findSpinbutton("year")?.getAttribute("aria-valuenow"));
+  } catch (err) {
+    console.error("[BD] syncAllSegments unexpected error —", err);
+    bailout("unexpected error during segment sync");
+  }
 }
 
 // ─── HIDE / RESTORE BASK BIRTHDAY ELEMENTS ───────────────────────────────────
@@ -222,10 +243,10 @@ function hideEl(el, method) {
 }
 
 function applyBirthdayHides() {
-  if (!isMounted) return;
+  if (!isMounted) return true;
   const container = document.getElementById("script-container");
   const next = container?.nextElementSibling;
-  if (!next) { console.log("[BD] applyBirthdayHides — no next sibling"); return; }
+  if (!next) { console.log("[BD] applyBirthdayHides — no next sibling"); return false; }
 
   const section = next.querySelector("section.relative") ?? next;
   console.log("[BD] applyBirthdayHides — section found:", !!section);
@@ -240,8 +261,16 @@ function applyBirthdayHides() {
   console.log("[BD] applyBirthdayHides — h4:", !!h4, "h4Wrap:", !!h4Wrap, "dateGroup:", !!dateGroup, "dateWrap:", !!dateWrap);
   console.log("[BD] applyBirthdayHides — spinbuttons in DOM: month:", !!findSpinbutton("month"), "day:", !!findSpinbutton("day"), "year:", !!findSpinbutton("year"));
 
+  // dateWrap is critical: without hiding it both UIs show simultaneously.
+  // If it's gone Bask's layout changed — bail rather than show a broken dual-UI.
+  if (!dateWrap) {
+    bailout("cannot locate Bask date wrapper — layout may have changed");
+    return false;
+  }
+
   hideEl(h4Wrap,   "collapse");
   hideEl(dateWrap, "offscreen");
+  return true;
 }
 
 function restoreBirthdayHides() {
@@ -262,25 +291,26 @@ function mountBirthdayUI() {
   if (!container)       { console.log("[BD] no script-container"); return; }
   if (!isBirthdayPage()) { console.log("[BD] not on birthday page"); return; }
 
-  // Build option lists
-  const now     = new Date();
-  const maxYear = now.getFullYear() - 18;
-  const minYear = now.getFullYear() - 100;
+  try {
+    // Build option lists
+    const now     = new Date();
+    const maxYear = now.getFullYear() - 18;
+    const minYear = now.getFullYear() - 100;
 
-  const monthOpts = MONTHS.map((m, i) =>
-    `<option value="${i + 1}">${m}</option>`
-  ).join("");
+    const monthOpts = MONTHS.map((m, i) =>
+      `<option value="${i + 1}">${m}</option>`
+    ).join("");
 
-  const dayOpts = Array.from({ length: 31 }, (_, i) =>
-    `<option value="${i + 1}">${i + 1}</option>`
-  ).join("");
+    const dayOpts = Array.from({ length: 31 }, (_, i) =>
+      `<option value="${i + 1}">${i + 1}</option>`
+    ).join("");
 
-  let yearOpts = "";
-  for (let y = maxYear; y >= minYear; y--) {
-    yearOpts += `<option value="${y}">${y}</option>`;
-  }
+    let yearOpts = "";
+    for (let y = maxYear; y >= minYear; y--) {
+      yearOpts += `<option value="${y}">${y}</option>`;
+    }
 
-  container.innerHTML = `
+    container.innerHTML = `
 <style>${BD_CSS}</style>
 <div class="bd-wrap">
   <h4 style="margin-bottom: 40px; color: rgb(34, 31, 31);" class="!no-underline text-brand-heading-text font-brand-header text-3xl font-bold" style="color: rgb(34, 31, 31);">When were you born?</h4>
@@ -310,41 +340,48 @@ function mountBirthdayUI() {
 </div>
 `;
 
-  isMounted = true;
-  console.log("[BD] HTML injected ✓");
+    isMounted = true;
+    console.log("[BD] HTML injected ✓");
 
-  // Pre-fill from whatever Bask already has in the spinbuttons
-  const mSpin = findSpinbutton("month");
-  const dSpin = findSpinbutton("day");
-  const ySpin = findSpinbutton("year");
-  const mSel  = document.getElementById("bd-month");
-  const dSel  = document.getElementById("bd-day");
-  const ySel  = document.getElementById("bd-year");
+    // Pre-fill from whatever Bask already has in the spinbuttons
+    const mSpin = findSpinbutton("month");
+    const dSpin = findSpinbutton("day");
+    const ySpin = findSpinbutton("year");
+    const mSel  = document.getElementById("bd-month");
+    const dSel  = document.getElementById("bd-day");
+    const ySel  = document.getElementById("bd-year");
 
-  // Pre-fill selects from Bask spinbuttons if they already have values
-  const mVal = mSpin?.getAttribute("aria-valuenow");
-  const dVal = dSpin?.getAttribute("aria-valuenow");
-  const yVal = ySpin?.getAttribute("aria-valuenow");
-  if (mVal) { mSel.value = mVal; bdSelection.month = parseInt(mVal, 10); }
-  if (dVal) { dSel.value = dVal; bdSelection.day   = parseInt(dVal, 10); }
-  if (yVal) { ySel.value = yVal; bdSelection.year  = parseInt(yVal, 10); }
-  console.log("[BD] pre-filled month/day/year:", mVal, dVal, yVal);
+    // Pre-fill selects from Bask spinbuttons if they already have values
+    const mVal = mSpin?.getAttribute("aria-valuenow");
+    const dVal = dSpin?.getAttribute("aria-valuenow");
+    const yVal = ySpin?.getAttribute("aria-valuenow");
+    if (mVal) { mSel.value = mVal; bdSelection.month = parseInt(mVal, 10); }
+    if (dVal) { dSel.value = dVal; bdSelection.day   = parseInt(dVal, 10); }
+    if (yVal) { ySel.value = yVal; bdSelection.year  = parseInt(yVal, 10); }
+    console.log("[BD] pre-filled month/day/year:", mVal, dVal, yVal);
 
-  applyBirthdayHides();
+    // applyBirthdayHides returns false (and calls bailout internally) if Bask's
+    // layout has changed and we can't locate the elements to hide.
+    const hideOk = applyBirthdayHides();
+    if (!hideOk) return;
 
-  // Each select update records its value then re-applies all known segments together
-  addListener(mSel, "change", () => {
-    bdSelection.month = parseInt(mSel.value, 10);
-    syncAllSegments();
-  });
-  addListener(dSel, "change", () => {
-    bdSelection.day = parseInt(dSel.value, 10);
-    syncAllSegments();
-  });
-  addListener(ySel, "change", () => {
-    bdSelection.year = parseInt(ySel.value, 10);
-    syncAllSegments();
-  });
+    // Each select update records its value then re-applies all known segments together
+    addListener(mSel, "change", () => {
+      bdSelection.month = parseInt(mSel.value, 10);
+      syncAllSegments();
+    });
+    addListener(dSel, "change", () => {
+      bdSelection.day = parseInt(dSel.value, 10);
+      syncAllSegments();
+    });
+    addListener(ySel, "change", () => {
+      bdSelection.year = parseInt(ySel.value, 10);
+      syncAllSegments();
+    });
+  } catch (err) {
+    console.error("[BD] mountBirthdayUI unexpected error —", err);
+    bailout("unexpected error during mount");
+  }
 }
 
 // ─── UNMOUNT ──────────────────────────────────────────────────────────────────
@@ -363,10 +400,15 @@ function unmountBirthdayUI() {
 
 // ─── SYNC ─────────────────────────────────────────────────────────────────────
 function syncBirthdayUI() {
-  const on = isBirthdayPage();
-  console.log("[BD] syncBirthdayUI — on:", on, "isMounted:", isMounted);
-  if (on) mountBirthdayUI();
-  else    unmountBirthdayUI();
+  try {
+    const on = isBirthdayPage();
+    console.log("[BD] syncBirthdayUI — on:", on, "isMounted:", isMounted);
+    if (on) mountBirthdayUI();
+    else    unmountBirthdayUI();
+  } catch (err) {
+    console.error("[BD] syncBirthdayUI unexpected error —", err);
+    bailout("unexpected error during UI sync");
+  }
 }
 
 syncBirthdayUI();
