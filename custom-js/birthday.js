@@ -56,25 +56,24 @@ const MONTHS = [
 const BD_CSS = `
 .bd-wrap { width: 100%; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
 .bd-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
-.bd-heading { font-size: 28px; font-weight: 700; color: #221f1f; margin-bottom: 20px; line-height: 1.2; }
-.bd-selects { display: grid; grid-template-columns: 1.4fr 0.8fr 1fr; gap: 10px; width: 100%; }
-.bd-field { display: flex; flex-direction: column; gap: 6px; }
-.bd-label { font-size: 11px; font-weight: 600; color: #5b6470; text-transform: uppercase; letter-spacing: 0.5px; }
+.bd-selects { display: grid; grid-template-columns: 1.5fr 0.9fr 1.2fr; gap: 10px; width: 100%; }
+.bd-field { display: flex; flex-direction: column; gap: 8px; }
+.bd-label { font-size: 11px; font-weight: 600; color: #5b6470; text-transform: uppercase; letter-spacing: 0.8px; padding-left: 4px; }
 .bd-select {
-  width: 100%; height: 62px; padding: 0 34px 0 14px;
-  border: 1.5px solid #47642e; border-radius: 14px;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23221f1f' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
-  color: #221f1f; font-family: inherit; font-size: 15px; font-weight: 600;
-  appearance: none; -webkit-appearance: none; cursor: pointer; outline: none;
-  transition: border-color .15s ease, box-shadow .15s ease;
+  width: 100%; height: 80px; padding: 0 40px 0 20px;
+  border: none; outline: 1px solid #47642e; border-radius: 16px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23221f1f' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 16px center;
+  color: #221f1f; font-family: inherit; font-size: 16px; font-weight: 600;
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  transition: outline-color .15s ease, outline-width .15s ease;
 }
-.bd-select:focus { border-color: #221f1f; border-width: 2px; box-shadow: 0 0 0 3px rgba(34,31,31,0.08); }
-.bd-select:required:invalid { color: #9ca3af; font-weight: 400; }
+.bd-select:hover { outline-color: #D4D4D4; }
+.bd-select:focus { outline: 2px solid #221f1f; }
+.bd-select:required:invalid { color: #9ca3af; font-weight: 500; }
 .bd-select option { font-weight: 500; color: #221f1f; }
-@media (max-width: 360px) {
-  .bd-selects { gap: 6px; }
-  .bd-select { font-size: 13px; padding: 0 26px 0 10px; }
-  .bd-heading { font-size: 24px; }
+@media (max-width: 380px) {
+  .bd-selects { gap: 7px; }
+  .bd-select { font-size: 14px; padding: 0 28px 0 14px; }
 }
 `;
 
@@ -284,7 +283,7 @@ function mountBirthdayUI() {
   container.innerHTML = `
 <style>${BD_CSS}</style>
 <div class="bd-wrap">
-  <h4 class="bd-heading">When were you born?</h4>
+  <h4 style="margin-bottom: 40px; color: rgb(34, 31, 31);" class="!no-underline text-brand-heading-text font-brand-header text-3xl font-bold" style="color: rgb(34, 31, 31);">When were you born?</h4>
   <div class="bd-selects">
     <div class="bd-field">
       <label class="bd-label" for="bd-month">Month</label>
