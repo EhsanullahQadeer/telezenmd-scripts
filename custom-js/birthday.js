@@ -69,7 +69,8 @@ const BD_CSS = `
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 .bd-select:focus { border-color: #221f1f; border-width: 2px; box-shadow: 0 0 0 3px rgba(34,31,31,0.08); }
-.bd-select option { font-weight: 500; }
+.bd-select:required:invalid { color: #9ca3af; font-weight: 400; }
+.bd-select option { font-weight: 500; color: #221f1f; }
 @media (max-width: 360px) {
   .bd-selects { gap: 6px; }
   .bd-select { font-size: 13px; padding: 0 26px 0 10px; }
@@ -84,9 +85,9 @@ let bdHideObserver = null;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function isBirthdayPage() {
-  return !![...document.querySelectorAll("h4")].find(
-    h => h.textContent.trim() === "When were you born?"
-  );
+  // Use Bask's spinbuttons as the signal — our own injected h4 would
+  // cause a self-referential false-positive if we checked the h4 text.
+  return !!findSpinbutton("month");
 }
 
 function findSpinbutton(label) {
@@ -287,20 +288,23 @@ function mountBirthdayUI() {
   <div class="bd-selects">
     <div class="bd-field">
       <label class="bd-label" for="bd-month">Month</label>
-      <select class="bd-select" id="bd-month">
-        <option value="">Month</option>${monthOpts}
+      <select class="bd-select" id="bd-month" required>
+        <option value="" disabled selected>Month</option>
+        ${monthOpts}
       </select>
     </div>
     <div class="bd-field">
       <label class="bd-label" for="bd-day">Day</label>
-      <select class="bd-select" id="bd-day">
-        <option value="">Day</option>${dayOpts}
+      <select class="bd-select" id="bd-day" required>
+        <option value="" disabled selected>Day</option>
+        ${dayOpts}
       </select>
     </div>
     <div class="bd-field">
       <label class="bd-label" for="bd-year">Year</label>
-      <select class="bd-select" id="bd-year">
-        <option value="">Year</option>${yearOpts}
+      <select class="bd-select" id="bd-year" required>
+        <option value="" disabled selected>Year</option>
+        ${yearOpts}
       </select>
     </div>
   </div>
@@ -318,28 +322,28 @@ function mountBirthdayUI() {
   const dSel  = document.getElementById("bd-day");
   const ySel  = document.getElementById("bd-year");
 
+  // Pre-fill selects from Bask spinbuttons if they already have values
   const mVal = mSpin?.getAttribute("aria-valuenow");
   const dVal = dSpin?.getAttribute("aria-valuenow");
   const yVal = ySpin?.getAttribute("aria-valuenow");
-  if (mVal) mSel.value = mVal;
-  if (dVal) dSel.value = dVal;
-  if (yVal) ySel.value = yVal;
+  if (mVal) { mSel.value = mVal; bdSelection.month = parseInt(mVal, 10); }
+  if (dVal) { dSel.value = dVal; bdSelection.day   = parseInt(dVal, 10); }
+  if (yVal) { ySel.value = yVal; bdSelection.year  = parseInt(yVal, 10); }
   console.log("[BD] pre-filled month/day/year:", mVal, dVal, yVal);
 
-  // Hiding disabled — confirming communication works first
-  // applyBirthdayHides();
+  applyBirthdayHides();
 
   // Each select update records its value then re-applies all known segments together
   addListener(mSel, "change", () => {
-    bdSelection.month = mSel.value ? parseInt(mSel.value, 10) : null;
+    bdSelection.month = parseInt(mSel.value, 10);
     syncAllSegments();
   });
   addListener(dSel, "change", () => {
-    bdSelection.day = dSel.value ? parseInt(dSel.value, 10) : null;
+    bdSelection.day = parseInt(dSel.value, 10);
     syncAllSegments();
   });
   addListener(ySel, "change", () => {
-    bdSelection.year = ySel.value ? parseInt(ySel.value, 10) : null;
+    bdSelection.year = parseInt(ySel.value, 10);
     syncAllSegments();
   });
 }
@@ -351,7 +355,7 @@ function unmountBirthdayUI() {
     bdHideObserver.disconnect();
     bdHideObserver = null;
   }
-  // restoreBirthdayHides(); // hiding disabled
+  restoreBirthdayHides();
   const container = document.getElementById("script-container");
   if (container) container.innerHTML = "";
   isMounted = false;
