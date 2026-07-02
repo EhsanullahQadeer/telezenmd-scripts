@@ -111,6 +111,14 @@ function applyBaskHides(section) {
     console.log("[CO-DEBUG] removing hr from DOM");
     hr.remove();
   });
+  // Remove promo code nudge — scoped to section first, fallback to document
+  const promoRoot = section.querySelector("span.\\!underline") ? section : document;
+  promoRoot.querySelectorAll("span").forEach((el) => {
+    if (el.textContent.trim() === "APPLY CODE TELE50ZEN TO SAVE") {
+      console.log("[CO-DEBUG] removing promo code span from DOM");
+      el.remove();
+    }
+  });
 }
 
 function hideOriginalSection() {
@@ -344,7 +352,7 @@ padding-top:0 !important;
 .prog-review { color: var(--prog-muted); font-size: 12.5px; font-weight: 500; line-height: 1.5; margin-top: 7px; padding: 0 8px; }
 .prog-stat { font-size: 12px; font-weight: 700; line-height: 1.4; margin-top: 9px; padding: 0 6px; }
 .prog-select { padding: 4px 0 0; }
-.prog-select h2 { font-size: 18.5px; font-weight: 700; letter-spacing: -.2px; }
+.prog-select h2 {text-align: center; font-size: 23px; font-weight: 700; letter-spacing: -.2px; }
 .prog-select p { color: var(--ink); font-size: 12.5px; font-weight: 500; margin-top: 3px; }
 .prog-plans { padding: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .prog-plan-card { position: relative; background: #fff; border: 1px solid var(--bd); border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
@@ -423,9 +431,10 @@ margin-bottom: 6px;
 margin-left: auto;}
 .co-value-heading {margin-top:10px; font-size: 17px; font-weight: 800; color: var(--prog-ink); line-height: 1.15; letter-spacing: -0.3px; margin-bottom: 4px; text-align: center; }
 .co-value-block { text-align: center;}
+.co-val-row { display: flex; align-items: center; gap: 6px; justify-content: center; }
 .co-val-price { font-size: 30px; font-weight: 900; color: var(--prog-green); line-height: 1; letter-spacing: -1px; }
-.co-val-label { font-size: 11.5px; font-weight: 600; color: var(--prog-muted); white-space: nowrap; margin-top: 3px; margin-bottom: 2px; }
-.co-val-label .co-val-green { color: var(--prog-green); font-weight: 700; }
+.co-val-pgm { font-size: 13px; font-weight: 600; color: var(--prog-muted); }
+.co-val-included { font-size: 11.5px; font-weight: 700; color: var(--prog-green); margin-top: 3px; margin-bottom: 2px; }
 .co-value-body { font-size: 11px; font-weight: 400; color: var(--prog-ink); }
 .co-value-body strong { color: var(--prog-green); font-weight: 700; }
 .co-urgency { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9px; font-weight: 600; color: var(--prog-green); margin-top: 6px; line-height: 1.4; text-align: center; }
@@ -440,16 +449,18 @@ margin-left: auto;}
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
     <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Tirzepatide</span> plan</h1>
-    <p class="prog-stat">Patients lose an average of 15–20%* of body weight<br>in their first year.</p>
   </div>
   <div class="co-value-heading">Your Complete Transformation System</div>
   <img class="co-banner-img" src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1782405371/checkout-banner_uwqvnd.png" alt="Complete Transformation System">
   <div class="co-value-block">
-    <div class="co-val-price">$1,845</div>
-    <div class="co-val-label">in Program Value <span class="co-val-green">Included with Every Plan</span></div>
+    <div class="co-val-row">
+      <span class="co-val-price">$1,845</span>
+      <span class="co-val-pgm">in Program Value</span>
+    </div>
+    <div class="co-val-included">Included with Every Plan</div>
     <p class="co-value-body"><strong>Lose It For Life&trade;</strong> helps change the subconscious habits that lead to weight struggles. <strong>GLP-1 Nutrition Protocol&trade;</strong> teaches you exactly how to eat for the best results while on GLP-1 therapy.</p>
   </div>
-  <div class="prog-select"><h2>Select your plan</h2></div>
+  <div class="prog-select"><h2>Choose Your Plan</h2></div>
   <div class="prog-plans" id="prog-plans"></div>
 
   <!-- Trust -->

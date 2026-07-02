@@ -84,13 +84,33 @@ let bdHideObserver = null;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function isBirthdayPage() {
-  // Use Bask's spinbuttons as the signal — our own injected h4 would
-  // cause a self-referential false-positive if we checked the h4 text.
-  return !!findSpinbutton("month");
+  if (findSpinbutton("month")) return true;
+  // iOS fallback: React Aria always wraps DateField in div[role="group"] regardless
+  // of whether it renders spinbuttons or contenteditable textboxes for the segments.
+  const container = document.getElementById("script-container");
+  const next = container?.nextElementSibling;
+  return !!next?.querySelector('div[role="group"]');
 }
 
 function findSpinbutton(label) {
-  return document.querySelector(`div[role="spinbutton"][aria-label="${label}"]`);
+  // Desktop: React Aria renders div[role="spinbutton"][aria-label]
+  // iOS Safari: React Aria renders div[role="textbox"][contenteditable][aria-label]
+  return (
+    document.querySelector(`div[role="spinbutton"][aria-label="${label}"]`) ||
+    document.querySelector(`div[role="textbox"][contenteditable][aria-label="${label}"]`) ||
+    null
+  );
+}
+
+// Read the current numeric value from a date segment regardless of platform.
+// Desktop spinbuttons expose aria-valuenow; iOS textboxes use data-placeholder + textContent.
+function getSegmentValue(el) {
+  if (!el) return null;
+  const avn = el.getAttribute("aria-valuenow");
+  if (avn !== null) return Number(avn);
+  if (el.getAttribute("data-placeholder") === "true") return null;
+  const text = el.textContent?.trim().replace(/[^0-9]/g, "");
+  return text ? Number(text) : null;
 }
 
 function tick(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -171,7 +191,13 @@ const bdSelection = { month: null, day: null, year: null };
 // from the same captured date and the last writer wins.
 function freshState() {
   const spin = findSpinbutton("month");
-  return spin ? getDateFieldState(spin) : null;
+  if (spin) return getDateFieldState(spin);
+  // Fallback: walk fiber from any date segment or the group wrapper
+  const container = document.getElementById("script-container");
+  const next = container?.nextElementSibling;
+  const group = next?.querySelector('div[role="group"]');
+  const target = group?.querySelector('[role="spinbutton"],[role="textbox"][contenteditable]') ?? group ?? null;
+  return target ? getDateFieldState(target) : null;
 }
 
 async function syncAllSegments() {
@@ -204,8 +230,9 @@ async function syncAllSegments() {
     // displayValue. Retrying only the wrong segments avoids further overwrites.
     for (const [seg, val] of segments) {
       if (val === null) continue;
-      const current = Number(findSpinbutton(seg)?.getAttribute("aria-valuenow"));
-      if (current !== val) {
+      const current = getSegmentValue(findSpinbutton(seg));
+      // null means we can't verify (iOS may not expose the value yet) — skip retry
+      if (current !== null && current !== val) {
         const s = freshState();
         if (!s) break;
         s.setSegment(seg, val);
@@ -213,9 +240,9 @@ async function syncAllSegments() {
       }
     }
 
-    console.log("[BD] syncAllSegments — month:", findSpinbutton("month")?.getAttribute("aria-valuenow"),
-      "day:", findSpinbutton("day")?.getAttribute("aria-valuenow"),
-      "year:", findSpinbutton("year")?.getAttribute("aria-valuenow"));
+    console.log("[BD] syncAllSegments — month:", getSegmentValue(findSpinbutton("month")),
+      "day:", getSegmentValue(findSpinbutton("day")),
+      "year:", getSegmentValue(findSpinbutton("year")));
   } catch (err) {
     console.error("[BD] syncAllSegments unexpected error —", err);
     bailout("unexpected error during segment sync");
@@ -351,13 +378,13 @@ function mountBirthdayUI() {
     const dSel  = document.getElementById("bd-day");
     const ySel  = document.getElementById("bd-year");
 
-    // Pre-fill selects from Bask spinbuttons if they already have values
-    const mVal = mSpin?.getAttribute("aria-valuenow");
-    const dVal = dSpin?.getAttribute("aria-valuenow");
-    const yVal = ySpin?.getAttribute("aria-valuenow");
-    if (mVal) { mSel.value = mVal; bdSelection.month = parseInt(mVal, 10); }
-    if (dVal) { dSel.value = dVal; bdSelection.day   = parseInt(dVal, 10); }
-    if (yVal) { ySel.value = yVal; bdSelection.year  = parseInt(yVal, 10); }
+    // Pre-fill selects from Bask's date segments if they already have values
+    const mVal = getSegmentValue(mSpin);
+    const dVal = getSegmentValue(dSpin);
+    const yVal = getSegmentValue(ySpin);
+    if (mVal) { mSel.value = mVal; bdSelection.month = mVal; }
+    if (dVal) { dSel.value = dVal; bdSelection.day   = dVal; }
+    if (yVal) { ySel.value = yVal; bdSelection.year  = yVal; }
     console.log("[BD] pre-filled month/day/year:", mVal, dVal, yVal);
 
     // applyBirthdayHides returns false (and calls bailout internally) if Bask's

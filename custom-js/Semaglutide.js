@@ -1,7 +1,7 @@
 // ─── TZMD LIFECYCLE ENGINE ────────────────────────────────────────────────────
 window.__TZMD__ ??= { activePage: null, cleanup: {} };
 
-window.__TZMD__.createPage ??= function createPage(PAGE_ID) {
+window.__TZMD__.createPage ??= function createPage(PAGE_ID, onDestroy) {
   const registry = window.__TZMD__;
   if (registry.activePage === PAGE_ID) {
     console.log(`[TZMD] ${PAGE_ID} already initialized — skipping`);
@@ -36,10 +36,7 @@ window.__TZMD__.createPage ??= function createPage(PAGE_ID) {
 
     console.log(`[TZMD] ${PAGE_ID} destroy`);
 
-    // page specific cleanup
-    if (PAGE_ID === "checkout") {
-      unmountCheckoutUI();
-    }
+    if (typeof onDestroy === "function") onDestroy();
 
     delete registry.cleanup[PAGE_ID];
 
@@ -114,6 +111,14 @@ function applyBaskHides(section) {
     console.log("[CO-DEBUG] removing hr from DOM");
     hr.remove();
   });
+  // Remove promo code nudge — scoped to section first, fallback to document
+  const promoRoot = section.querySelector("span.\\!underline") ? section : document;
+  promoRoot.querySelectorAll("span").forEach((el) => {
+    if (el.textContent.trim() === "APPLY CODE TELE50ZEN TO SAVE") {
+      console.log("[CO-DEBUG] removing promo code span from DOM");
+      el.remove();
+    }
+  });
 }
 
 function hideOriginalSection() {
@@ -164,7 +169,7 @@ function restoreOriginalSection() {
   hiddenSection = null;
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const page = window.__TZMD__.createPage("checkout");
+const page = window.__TZMD__.createPage("checkout", () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
   return;
@@ -314,6 +319,12 @@ function mountCheckoutUI() {
 
   container.innerHTML = `
 <style>
+nav{
+gap:20px !important;
+}
+.questionnaire-animation{
+padding-top:0 !important;
+}
 #script-container {
   width: 100%;
   display: flex;
@@ -335,13 +346,13 @@ function mountCheckoutUI() {
 }
 .prog-checkout { --prog-green: #3D5C2A; --prog-green-save: #4F8A37; --prog-ink: #1C1C1A; --prog-muted: #5B6470; --prog-bd: #E7E7E4; --prog-radio-off: #AEB1B8; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 100%; background: transparent; color: var(--prog-ink); }
 .prog-checkout, .prog-checkout * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
-.prog-head { text-align: center; padding: 6px 0 0; }
-.prog-title { font-size: 24.5px; font-weight: 700; line-height: 1.22; letter-spacing: -.2px; }
+.prog-head { text-align: center;  }
+.prog-title { font-size: 23px; font-weight: 700; line-height: 1.22; letter-spacing: -.2px; }
 .prog-title .prog-g { color: var(--prog-green); }
 .prog-review { color: var(--prog-muted); font-size: 12.5px; font-weight: 500; line-height: 1.5; margin-top: 7px; padding: 0 8px; }
-.prog-stat { font-size: 13px; font-weight: 700; line-height: 1.4; margin-top: 9px; padding: 0 6px; }
-.prog-select { padding: 14px 0 0; }
-.prog-select h2 { font-size: 18.5px; font-weight: 700; letter-spacing: -.2px; }
+.prog-stat { font-size: 12px; font-weight: 700; line-height: 1.4; margin-top: 9px; padding: 0 6px; }
+.prog-select { padding: 4px 0 0; }
+.prog-select h2 {text-align: center; font-size: 23px; font-weight: 700; letter-spacing: -.2px; }
 .prog-select p { color: var(--ink); font-size: 12.5px; font-weight: 500; margin-top: 3px; }
 .prog-plans { padding: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .prog-plan-card { position: relative; background: #fff; border: 1px solid var(--bd); border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
@@ -414,19 +425,18 @@ function mountCheckoutUI() {
 .prog-affirm { height: 20px; width: auto; overflow: visible; }
 .prog-afterpay { height: 15px; width: auto; overflow: visible; margin-bottom: -2px; }
 .prog-pay-sub { font-size: 12px; font-weight: 500; color: var(--prog-ink); line-height: 1.6; }
-.prog-checkout .features-parent {border: 1px solid var(--bd); border-radius: 18px; margin: 0; padding: 6px 0; }
-.prog-checkout .prog-inc-title { font-size: 18.5px; font-weight: 700; color: var(--prog-ink); line-height: 1.3; margin-top: 20px; margin-bottom: 8px; }
-.prog-checkout .features { position: relative;   }
-.prog-checkout .frow { display: grid; grid-template-columns: repeat(3, 1fr); }
-.prog-checkout .fcell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; padding: 12px 3px 11px; gap: 8px; }
-.prog-checkout .ficon { width: 40px; height: 40px; color: var(--primary-green); display: flex; align-items: center; justify-content: center; }
-.prog-checkout .ficon img { width: 100%; height: 100%; object-fit: contain; }
-.prog-checkout .flabel { font-size: 9.5px; line-height: 1.4; font-weight: 500; color: var(--ink); white-space: nowrap; letter-spacing: -0.1px; }
-.prog-checkout .features .vdiv { position: absolute; width: 1px; background: var(--bd); }
-.prog-checkout .features .hdiv { position: absolute; top: 50%; height: 1px; background: var(--bd); }
-.prog-checkout .features .hdiv-1 { left: 24px; width: calc(33.33% - 42px); }
-.prog-checkout .features .hdiv-2 { left: calc(33.33% + 18px); width: calc(33.33% - 36px); }
-.prog-checkout .features .hdiv-3 { left: calc(66.66% + 18px); right: 24px; }
+.co-banner-img { display: block; width: 70%; max-width:270px; border-radius: 12px;
+margin-right: auto;
+margin-bottom: 6px;
+margin-left: auto;}
+.co-value-heading {margin-top:10px; font-size: 17px; font-weight: 800; color: var(--prog-ink); line-height: 1.15; letter-spacing: -0.3px; margin-bottom: 4px; text-align: center; }
+.co-value-block { text-align: center;}
+.co-val-row { display: flex; align-items: center; gap: 6px; justify-content: center; }
+.co-val-price { font-size: 30px; font-weight: 900; color: var(--prog-green); line-height: 1; letter-spacing: -1px; }
+.co-val-pgm { font-size: 13px; font-weight: 600; color: var(--prog-muted); }
+.co-val-included { font-size: 11.5px; font-weight: 700; color: var(--prog-green); margin-top: 3px; margin-bottom: 2px; }
+.co-value-body { font-size: 11px; font-weight: 400; color: var(--prog-ink); }
+.co-value-body strong { color: var(--prog-green); font-weight: 700; }
 .co-urgency { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 9px; font-weight: 600; color: var(--prog-green); margin-top: 6px; line-height: 1.4; text-align: center; }
 .co-urgency svg { flex: none; width: 15px; height: 15px; color: var(--prog-green); }
 .co-badges { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-bottom: 4px; }
@@ -439,29 +449,18 @@ function mountCheckoutUI() {
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
     <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Semaglutide</span> plan</h1>
-    <p class="prog-stat">Patients lose an average of 15–20%* of body weight<br>in their first year.</p>
   </div>
-  <div class="prog-inc-title text-center">Every Plan Includes:</div>
-  <div class="features-parent">
-    <div class="features">
-    <div class="frow">
-      <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646704/physicianguidedcare_uwuuub.png" alt="Physician" /></div><div class="flabel">Physician-Guided<br />Care</div></div>
-      <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646705/loseitforlifeprogram_twkqeu.png" alt="Lose It For Life" /></div><div class="flabel">Lose It For Life®<br />Program</div></div>
-      <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646704/GLP-1nutritionprotocol-Picsart-BackgroundRemover_ull02n.png" alt="GLP-1 Nutrition Protocol" /></div><div class="flabel">GLP-1 Nutrition<br />Protocol™</div></div>
+  <div class="co-value-heading">Your Complete Transformation System</div>
+  <img class="co-banner-img" src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1782405371/checkout-banner_uwqvnd.png" alt="Complete Transformation System">
+  <div class="co-value-block">
+    <div class="co-val-row">
+      <span class="co-val-price">$1,845</span>
+      <span class="co-val-pgm">in Program Value</span>
     </div>
-    <div class="frow">
-      <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646704/concierge_eb3gi7.png" alt="Concierge Support" /></div><div class="flabel">Concierge<br />Support</div></div>
-      <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646705/ChatGPT_Image_Jun_16_2026_01_26_54_PM_jzrfop.png" alt="Free Shipping" /></div><div class="flabel">Free<br />Shipping</div></div>
-      <div class="fcell"><div class="ficon"><img src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1781646704/ChatGPT_Image_Jun_16_2026_01_29_42_PM_iykuqj.png" alt="Injection Supplies Included" /></div><div class="flabel">Injection Supplies<br />Included</div></div>
-    </div>
-    <div class="hdiv hdiv-1"></div><div class="hdiv hdiv-2"></div><div class="hdiv hdiv-3"></div>
-    <div class="vdiv" style="left:33.33%;top:11%;height:31%;"></div>
-    <div class="vdiv" style="left:66.66%;top:11%;height:31%;"></div>
-    <div class="vdiv" style="left:33.33%;top:58%;height:31%;"></div>
-    <div class="vdiv" style="left:66.66%;top:58%;height:31%;"></div>
+    <div class="co-val-included">Included with Every Plan</div>
+    <p class="co-value-body"><strong>Lose It For Life&trade;</strong> helps change the subconscious habits that lead to weight struggles. <strong>GLP-1 Nutrition Protocol&trade;</strong> teaches you exactly how to eat for the best results while on GLP-1 therapy.</p>
   </div>
-  </div>
-  <div class="prog-select"><h2>Select your plan</h2></div>
+  <div class="prog-select"><h2>Choose Your Plan</h2></div>
   <div class="prog-plans" id="prog-plans"></div>
 
   <!-- Trust -->
