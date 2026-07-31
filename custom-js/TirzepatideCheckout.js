@@ -442,6 +442,7 @@ margin-left: auto;}
       <div class="co-trust-t2">If approved, your treatment begins.</div>
     </div>
   </div>
+  <div id="tzmd-pay-btn-wrap"></div>
 
     <div class="prog-fsa-row">
     <div class="prog-fsa-box">
@@ -651,6 +652,163 @@ margin-left: auto;}
   }
   injectStickyBar();
 
+  // TEMP: Production test restriction for Ehsanullah only.
+  // Remove this condition after the modal flow is approved.
+  function initPaymentModal() {
+    if (window.baskPatientData?.firstName !== "Ehsanullah") return;
+
+    // Find the Bask payment container — smallest ancestor of #payment-element
+    // that also contains the submit button. Stops before document.body.
+    function findPaymentSection() {
+      const payEl = document.getElementById("payment-element");
+      const submitBtn = [...document.querySelectorAll('button[type="submit"]')]
+        .find(b => /Treatment Plan|Doctor Review/i.test(b.textContent));
+      if (!payEl || !submitBtn) return null;
+      let el = payEl.parentElement;
+      while (el && el !== document.body) {
+        if (el.contains(submitBtn)) return el;
+        el = el.parentElement;
+      }
+      return null;
+    }
+
+    function setup(paySection) {
+      // Insert a silent placeholder at the payment section's original DOM position
+      const placeholder = document.createElement("div");
+      placeholder.id = "tzmd-payment-placeholder";
+      paySection.parentElement.insertBefore(placeholder, paySection);
+
+      // Inject modal CSS
+      const style = document.createElement("style");
+      style.id = "tzmd-modal-style";
+      style.textContent = `
+        #tzmd-modal-overlay {
+          display: none; position: fixed; inset: 0; z-index: 99999;
+          align-items: center; justify-content: center;
+        }
+        #tzmd-modal-overlay.tzmd-open { display: flex; }
+        #tzmd-modal-backdrop {
+          position: absolute; inset: 0; background: rgba(0,0,0,0.55);
+        }
+        #tzmd-modal-box {
+          position: relative; background: #fff; border-radius: 16px;
+          width: 92%; max-width: 520px; max-height: 90vh;
+          overflow-y: auto; -webkit-overflow-scrolling: touch; z-index: 1;
+        }
+        #tzmd-modal-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 14px 16px 12px; position: sticky; top: 0; background: #fff;
+          z-index: 2; border-bottom: 1px solid #EAEAE7;
+        }
+        #tzmd-modal-title {
+          font-family: 'Poppins', sans-serif; font-size: 15px; font-weight: 700;
+          color: #1A1A18;
+        }
+        #tzmd-modal-close {
+          background: none; border: none; font-size: 22px; line-height: 1;
+          cursor: pointer; color: #888; padding: 4px 8px;
+        }
+        #tzmd-modal-close:hover { color: #1A1A18; }
+        #tzmd-modal-inner { padding: 16px 16px 28px; }
+        body.tzmd-modal-open { overflow: hidden !important; }
+        #tzmd-pay-btn {
+          width: 100%; display: flex; align-items: center; justify-content: center;
+          gap: 12px; background: #1A1A18; color: #fff; border: none;
+          border-radius: 12px; padding: 15px 24px; margin-top: 14px;
+          font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-size: 14px; font-weight: 600; letter-spacing: .1px; line-height: 1;
+          cursor: pointer; transition: background .15s ease, transform .1s ease;
+          -webkit-font-smoothing: antialiased;
+        }
+        #tzmd-pay-btn svg { flex: none; opacity: 0.88; }
+        #tzmd-pay-btn:hover { background: #3a3a38; }
+        #tzmd-pay-btn:focus-visible { outline: 2px solid rgba(255,255,255,0.45); outline-offset: 3px; }
+        #tzmd-pay-btn:active { transform: translateY(1px); }
+        @media (max-width: 600px) {
+          #tzmd-modal-overlay.tzmd-open { align-items: flex-end; }
+          #tzmd-modal-box {
+            width: 100%; max-width: 100%; max-height: 95vh;
+            border-radius: 20px 20px 0 0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+
+      // Build modal overlay
+      const overlay = document.createElement("div");
+      overlay.id = "tzmd-modal-overlay";
+      overlay.innerHTML = `
+        <div id="tzmd-modal-backdrop"></div>
+        <div id="tzmd-modal-box">
+          <div id="tzmd-modal-header">
+            <span id="tzmd-modal-title">Complete Your Order</span>
+            <button id="tzmd-modal-close" aria-label="Close payment form">✕</button>
+          </div>
+          <div id="tzmd-modal-inner"></div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // Move payment section into modal once — stays there permanently.
+      // Stripe iframes live on <body> and communicate via postMessage;
+      // moving #payment-element does not affect iframe connections.
+      const modalInner = document.getElementById("tzmd-modal-inner");
+      modalInner.appendChild(paySection);
+      console.log("[CO-MODAL] payment section moved into modal ✓");
+
+      // Inject trigger button
+      const btnWrap = document.getElementById("tzmd-pay-btn-wrap");
+      if (btnWrap) {
+        const CARD = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
+        btnWrap.innerHTML = `<button id="tzmd-pay-btn">${CARD}Add Payment Method</button>`;
+      }
+
+      function openModal() {
+        overlay.classList.add("tzmd-open");
+        document.body.classList.add("tzmd-modal-open");
+      }
+
+      function closeModal() {
+        overlay.classList.remove("tzmd-open");
+        document.body.classList.remove("tzmd-modal-open");
+      }
+
+      const payBtn = document.getElementById("tzmd-pay-btn");
+      if (payBtn) addListener(payBtn, "click", openModal);
+
+      const closeBtn = document.getElementById("tzmd-modal-close");
+      const backdrop = document.getElementById("tzmd-modal-backdrop");
+      if (closeBtn) addListener(closeBtn, "click", closeModal);
+      if (backdrop) addListener(backdrop, "click", closeModal);
+      addListener(document, "keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+      // Store cleanup so unmount can restore the payment section to its original position
+      window.__TZMD__._modalCleanup = () => {
+        placeholder.parentElement?.insertBefore(paySection, placeholder);
+        placeholder.remove();
+        overlay.remove();
+        style.remove();
+        document.body.classList.remove("tzmd-modal-open");
+        delete window.__TZMD__._modalCleanup;
+      };
+    } // end setup()
+
+    // Try immediately; if Stripe hasn't mounted #payment-element yet, wait for it.
+    const paySection = findPaymentSection();
+    if (paySection) {
+      setup(paySection);
+    } else {
+      console.warn("[CO-MODAL] payment section not ready — waiting for Stripe mount");
+      const waitObs = new MutationObserver(() => {
+        const ps = findPaymentSection();
+        if (ps) { waitObs.disconnect(); setup(ps); }
+      });
+      waitObs.observe(document.body, { childList: true, subtree: true });
+      addObserver(waitObs);
+    }
+  }
+  initPaymentModal();
+
 }
 
 // ─── UNMOUNT ──────────────────────────────────────────────────────────────────
@@ -661,6 +819,7 @@ function unmountCheckoutUI() {
     "activePage:",
     window.__TZMD__.activePage,
   );
+  if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
   restoreOriginalSection();
   document.getElementById("tzmd-sticky-bar")?.remove();
 
