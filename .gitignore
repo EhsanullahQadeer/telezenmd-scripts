@@ -1,0 +1,4 @@
+node_modules/
+playwright/auth/session.json
+playwright/auth/checkout-snapshot.json
+playwright/auth/user-data/

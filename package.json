@@ -1,0 +1,14 @@
+{
+  "name": "eee-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "save-session": "node playwright/save-session.js",
+    "save-checkout": "node playwright/save-checkout-session.js",
+    "test:checkout": "npx playwright test playwright/tests/checkout.spec.js --headed",
+    "test": "npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

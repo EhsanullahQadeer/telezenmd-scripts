@@ -183,7 +183,6 @@ console.log(
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let isMounted = false;
 let plans = [];
-let domCards = [];
 let plansObserver = null;
 
 
@@ -193,6 +192,17 @@ const STAR =
   '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 18.4 6.1 21l1.2-6.5L2.5 9.9l6.6-.9z"/></svg>';
 
 // ─── PURE HELPERS ─────────────────────────────────────────────────────────────
+// Read the plan name from the first span in the card header row.
+// Used for strict name-based mapping — never relies on DOM order.
+function getCardTitle(card) {
+  return card?.querySelector(":scope > div:first-child span:first-child")?.textContent?.trim() ?? "";
+}
+
+// Find a Bask card by its exact title text ("Monthly", "Quarterly", "Six months", "Yearly").
+function findCardByTitle(cardArr, title) {
+  return cardArr.find(c => getCardTitle(c) === title) ?? null;
+}
+
 function getPrice(card) {
   const text =
     card?.querySelector(":scope > div:first-child span:last-child")
@@ -220,19 +230,43 @@ function getSavings(monthlyPrice, discountedPrice) {
   const savings = Math.round((monthlyPrice - discountedPrice) * 12);
   return `Save $${formatCurrency(savings)}/year vs monthly`;
 }
-function getPlans(cards) {
-  const monthlyPrice = getPrice(cards[3]);
+function getPlans(cardArr) {
+  // Strict name-based lookup — never relies on DOM order or array index.
+  // Bask card titles confirmed via Playwright inspection: "Monthly", "Quarterly", "Six months", "Yearly"
+  const monthlyCard   = findCardByTitle(cardArr, "Monthly");
+  const quarterlyCard = findCardByTitle(cardArr, "Quarterly");
+  const sixMonthCard  = findCardByTitle(cardArr, "Six months");
+  const yearlyCard    = findCardByTitle(cardArr, "Yearly");
+
+  const monthlyPrice = getPrice(monthlyCard);
+
+  // Display order: Monthly → Quarterly → 6 Month → Annual
   return [
     {
+      id: "monthly",
+      baskCard: monthlyCard,
+      name: "",
+      price: monthlyPrice,
+      badge: "Starter Monthly",
+      badgeStyle: "gray",
+      check: false,
+      billed: "Billed monthly, cancel anytime",
+      selected: isSelected(monthlyCard),
+      highlights: [
+        { text: "Most patients upgrade<br>after their first month.", check: false },
+      ],
+    },
+    {
       id: "quarterly",
+      baskCard: quarterlyCard,
       name: "Quarterly Program",
-      price: getPrice(cards[0]),
+      price: getPrice(quarterlyCard),
       badge: "RECOMMENDED",
       badgeStyle: "green",
       check: true,
-      billed: getBilled(getPrice(cards[0]), 3),
-      save: getSavings(monthlyPrice, getPrice(cards[0])),
-      selected: isSelected(cards[0]),
+      billed: getBilled(getPrice(quarterlyCard), 3),
+      save: getSavings(monthlyPrice, getPrice(quarterlyCard)),
+      selected: isSelected(quarterlyCard),
       highlights: [
         { text: "Most Popular", check: true },
         { text: "Best Balance of<br>Savings & Flexibility", check: true },
@@ -240,40 +274,29 @@ function getPlans(cards) {
     },
     {
       id: "sixmonth",
+      baskCard: sixMonthCard,
       name: "6 Month Program",
-      price: getPrice(cards[1]),
+      price: getPrice(sixMonthCard),
       badge: "POPULAR UPGRADE",
       badgeStyle: "green",
       check: false,
-      billed: getBilled(getPrice(cards[1]), 6),
-      save: getSavings(monthlyPrice, getPrice(cards[1])),
-      selected: isSelected(cards[1]),
+      billed: getBilled(getPrice(sixMonthCard), 6),
+      save: getSavings(monthlyPrice, getPrice(sixMonthCard)),
+      selected: isSelected(sixMonthCard),
       highlights: [{ text: "Popular Upgrade", check: false, green: true }],
     },
     {
       id: "twelvemonth",
-      name: "12 Month Program",
-      price: getPrice(cards[2]),
+      baskCard: yearlyCard,
+      name: "Annual Program",
+      price: getPrice(yearlyCard),
       badge: "BEST VALUE",
       badgeStyle: "green",
       check: false,
-      billed: getBilled(getPrice(cards[2]), 12),
-      save: getSavings(monthlyPrice, getPrice(cards[2])),
-      selected: isSelected(cards[2]),
+      billed: getBilled(getPrice(yearlyCard), 12),
+      save: getSavings(monthlyPrice, getPrice(yearlyCard)),
+      selected: isSelected(yearlyCard),
       highlights: [{ text: "Lowest Monthly Cost", check: false, green: true }],
-    },
-    {
-      id: "monthly",
-      name: "",
-      price: monthlyPrice,
-      badge: "Starter Monthly",
-      badgeStyle: "gray",
-      check: false,
-      billed: "Billed monthly, cancel anytime",
-      selected: isSelected(cards[3]),
-      highlights: [
-        { text: "Most patients upgrade<br>after their first month.", check: false },
-      ],
     },
   ];
 }
@@ -363,7 +386,7 @@ padding-top:0 !important;
 .prog-plan-badge svg { width: 10px; height: 10px; }
 .prog-plan-row { display: flex; gap: 7px; align-items: flex-start; }
 .prog-plan-radio { position: relative; flex: none; width: 15px; height: 15px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--prog-radio-off); transition: border-color .15s ease; }
-.prog-plan-radio::x { content: ''; position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); transition: background .15s ease; }
+.prog-plan-radio::after { content: ''; position: absolute; top: 50%; left: 50%; width: 7px; height: 7px; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); transition: background .15s ease; }
 .prog-plan-card.prog-selected .prog-plan-radio { border-color: var(--prog-green); }
 .prog-plan-card.prog-selected .prog-plan-radio::after { background: var(--prog-green); }
 .prog-plan-content { flex: 1; min-width: 0; }
@@ -450,17 +473,6 @@ margin-left: auto;}
   <div class="prog-head">
     <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Semaglutide</span> plan</h1>
   </div>
-  <div class="co-value-heading">Your Complete Transformation System</div>
-  <img class="co-banner-img" src="https://res.cloudinary.com/dcl5ecseg/image/upload/v1782405371/checkout-banner_uwqvnd.png" alt="Complete Transformation System">
-  <div class="co-value-block">
-    <div class="co-val-row">
-      <span class="co-val-price">$1,845</span>
-      <span class="co-val-pgm">in Program Value</span>
-    </div>
-    <div class="co-val-included">Included with Every Plan</div>
-    <p class="co-value-body"><strong>Lose It For Life&trade;</strong> helps change the subconscious habits that lead to weight struggles. <strong>GLP-1 Nutrition Protocol&trade;</strong> teaches you exactly how to eat for the best results while on GLP-1 therapy.</p>
-  </div>
-  <div class="prog-select"><h2>Choose Your Plan</h2></div>
   <div class="prog-plans" id="prog-plans"></div>
 
   <!-- Trust -->
@@ -511,13 +523,21 @@ margin-left: auto;}
   }
 
   function initializePlans() {
-    const cards = document.querySelectorAll(
+    const cardsList = document.querySelectorAll(
       "ul.relative.mt-5.flex.flex-col.gap-3 > li",
     );
-    console.log("[CO] initializePlans — cards found:", cards.length);
-    if (cards.length < 4) return false;
-    domCards = [...cards];
-    plans = getPlans(cards);
+    console.log("[CO] initializePlans — cards found:", cardsList.length);
+    if (cardsList.length < 4) return false;
+    const cardArr = [...cardsList];
+    const foundTitles = cardArr.map(getCardTitle);
+    console.log("[CO] card titles:", foundTitles);
+    const required = ["Monthly", "Quarterly", "Six months", "Yearly"];
+    const missing  = required.filter(n => !foundTitles.includes(n));
+    if (missing.length) {
+      console.warn("[CO] missing Bask plan cards by title:", missing, "— found:", foundTitles);
+      return false;
+    }
+    plans = getPlans(cardArr);
     render();
     return true;
   }
@@ -533,42 +553,34 @@ margin-left: auto;}
     addObserver(plansObserver);
   }
 
-  const indexMap = { quarterly: 0, sixmonth: 1, twelvemonth: 2, monthly: 3 };
-  const idByIndex = ["quarterly", "sixmonth", "twelvemonth", "monthly"];
-
   function selectPlan(id) {
     if (!isMounted) return;
-    console.log("[CO] selectPlan:", id, "→ domCards[" + indexMap[id] + "]");
+    const plan = plans.find((p) => p.id === id);
+    if (!plan?.baskCard) { console.warn("[CO] no baskCard for plan:", id); return; }
+    console.log("[CO] selectPlan:", id, "→ clicking Bask card:", getCardTitle(plan.baskCard));
     plans.forEach((p) => (p.selected = p.id === id));
     wrap.querySelectorAll(".prog-plan-card").forEach((c) => {
       const on = c.dataset.id === id;
       c.classList.toggle("prog-selected", on);
       c.setAttribute("aria-checked", on);
     });
-    const domCard = domCards[indexMap[id]];
-    if (domCard) domCard.click();
-    else console.warn("[CO] domCard not found for id:", id);
+    plan.baskCard.click();
   }
 
+  // Watch each Bask card directly via its stored reference — no index arithmetic.
   const baskSelectionObserver = new MutationObserver(() => {
-    const selectedIdx = domCards.findIndex((c) =>
-      c.classList.contains("border-2"),
-    );
-    if (selectedIdx === -1) return;
-    const id = idByIndex[selectedIdx];
+    const selectedPlan = plans.find((p) => p.baskCard?.classList.contains("border-2"));
+    if (!selectedPlan) return;
     const currentId = plans.find((p) => p.selected)?.id;
-    if (id && id !== currentId) {
-      console.log("[CO] Bask selection changed → syncing custom UI to:", id);
-      plans.forEach((p) => (p.selected = p.id === id));
+    if (selectedPlan.id !== currentId) {
+      console.log("[CO] Bask selection changed → syncing custom UI to:", selectedPlan.id);
+      plans.forEach((p) => (p.selected = p.id === selectedPlan.id));
       render();
     }
   });
-  domCards.forEach((c) =>
-    baskSelectionObserver.observe(c, {
-      attributes: true,
-      attributeFilter: ["class"],
-    }),
-  );
+  plans.forEach((p) => {
+    if (p.baskCard) baskSelectionObserver.observe(p.baskCard, { attributes: true, attributeFilter: ["class"] });
+  });
   addObserver(baskSelectionObserver);
 
   addListener(wrap, "click", (e) => {
@@ -705,7 +717,6 @@ function unmountCheckoutUI() {
   container.innerHTML = "";
   isMounted = false;
   plans = [];
-  domCards = [];
 
   if (plansObserver) {
     plansObserver.disconnect();
