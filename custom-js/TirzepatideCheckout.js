@@ -64,6 +64,7 @@ console.log("[CO] script start — activePage:", window.__TZMD__.activePage);
 // ─── SECTION VISIBILITY ───────────────────────────────────────────────────────
 let hiddenSection = null;
 let sectionHideObserver = null;
+let _scrollLocked = true;   // true while modal is closed; blocks QC scroll entirely
 
 // Selectors for the specific children of <section.relative> to hide.
 // The section also contains the total/discount/payment rows below — those stay visible.
@@ -121,6 +122,38 @@ function applyBaskHides(section) {
   });
 }
 
+function lockQC(qc) {
+  // Intercept scrollTop setter on the element instance
+  let desc = null;
+  let proto = Object.getPrototypeOf(qc);
+  while (proto) {
+    desc = Object.getOwnPropertyDescriptor(proto, 'scrollTop');
+    if (desc) break;
+    proto = Object.getPrototypeOf(proto);
+  }
+  if (desc && desc.set) {
+    const origSet = desc.set;
+    const origGet = desc.get;
+    Object.defineProperty(qc, 'scrollTop', {
+      get() { return origGet.call(this); },
+      set(v) { if (!_scrollLocked) origSet.call(this, v); },
+      configurable: true,
+    });
+  }
+  // Also intercept scrollTo() in case Stripe uses that instead
+  const origScrollTo = qc.scrollTo;
+  if (typeof origScrollTo === 'function') {
+    qc.scrollTo = function(...args) { if (!_scrollLocked) origScrollTo.apply(this, args); };
+  }
+}
+
+function unlockQC() {
+  const qc = document.getElementById('questionnaire-container');
+  if (!qc) return;
+  try { delete qc.scrollTop; } catch(e) {}
+  try { delete qc.scrollTo; } catch(e) {}
+}
+
 function hideOriginalSection() {
   if (hiddenSection) return;
   const container = document.getElementById("script-container");
@@ -129,6 +162,33 @@ function hideOriginalSection() {
 
   function attach(section) {
     hiddenSection = section;
+    // Hide immediately so page-load content never flashes before applyBaskHides runs.
+    section.style.setProperty('visibility', 'hidden', 'important');
+    section.setAttribute('inert', '');
+
+    // Prevent Bask/Stripe from auto-scrolling to elements inside the hidden section.
+    // inert blocks focus-triggered scroll; this catches programmatic scrollIntoView calls.
+    const _origSIV = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function(opt) {
+      if (hiddenSection && hiddenSection.contains(this)) return;
+      _origSIV.call(this, opt);
+    };
+
+    // Block #questionnaire-container from scrolling while the modal is closed.
+    // Stripe init sets scrollTop on that container during iframe mounting — intercepting
+    // the setter prevents the scroll from ever happening (no poll correction, no jerk).
+    _scrollLocked = true;
+    const qcNow = document.getElementById('questionnaire-container');
+    if (qcNow) {
+      lockQC(qcNow);
+    } else {
+      const qcWatcher = new MutationObserver(() => {
+        const qc = document.getElementById('questionnaire-container');
+        if (qc) { qcWatcher.disconnect(); lockQC(qc); }
+      });
+      qcWatcher.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => qcWatcher.disconnect(), 10000);
+    }
     applyBaskHides(section);
     console.log("[CO] bask section children hidden ✓");
 
@@ -282,6 +342,44 @@ function planHTML(p) {
     </div></div>`;
 }
 
+// ─── COMPAT GUARD ─────────────────────────────────────────────────────────────
+// Central error reporter. All compatibility failures funnel here.
+// In the future, hook this into an alerting or monitoring system.
+function logBrokenCompatibility(source, { problem, expected, actual, fallback } = {}) {
+  const parts = [
+    `[CO] ⚠️  BASK COMPATIBILITY FAILURE`,
+    `     Location : ${source}`,
+    `     Problem  : ${problem ?? '(no detail)'}`,
+  ];
+  if (expected !== undefined) parts.push(`     Expected : ${expected}`);
+  if (actual   !== undefined) parts.push(`     Actual   : ${actual}`);
+  parts.push(`     Fallback : ${fallback ?? 'Customization aborted — Bask native checkout is fully usable'}`);
+  parts.push(`     Action   : A Bask update may have changed the expected DOM. Review TirzepatideCheckout.js.`);
+  console.error(parts.join('\n'));
+}
+
+// Synchronous pre-flight: verifies required Bask structure exists before any DOM mutation.
+function runPreFlight() {
+  const container = document.getElementById("script-container");
+  if (!container) {
+    return { ok: false, source: 'runPreFlight', problem: '#script-container element not found', expected: 'element with id="script-container"', actual: 'null' };
+  }
+  const next = container.nextElementSibling;
+  if (!next) {
+    return { ok: false, source: 'runPreFlight', problem: 'No sibling element found after #script-container', expected: 'Bask checkout section as nextElementSibling', actual: 'null' };
+  }
+  if (!next.querySelector("section.relative")) {
+    return { ok: false, source: 'runPreFlight', problem: 'section.relative not found inside Bask container', expected: 'section.relative inside nextElementSibling of #script-container', actual: `nextElementSibling tag=${next.tagName} class="${next.className}"` };
+  }
+  const totalLabel = [...document.querySelectorAll("span.font-brand-header")].find(
+    el => el.textContent.trim() === "Total (If approved):"
+  );
+  if (!totalLabel) {
+    return { ok: false, source: 'runPreFlight', problem: 'Bask "Total (If approved):" label not found', expected: 'span.font-brand-header with text "Total (If approved):"', actual: 'not found' };
+  }
+  return { ok: true };
+}
+
 // ─── MOUNT ────────────────────────────────────────────────────────────────────
 function mountCheckoutUI() {
   console.log(
@@ -290,15 +388,18 @@ function mountCheckoutUI() {
     "activePage:",
     window.__TZMD__.activePage,
   );
-  hideOriginalSection();
   if (isMounted) {
     console.log("[CO] already mounted, skip");
     return;
   }
+  const pf = runPreFlight();
+  if (!pf.ok) { logBrokenCompatibility(pf.source, pf); return; }
+  hideOriginalSection();
 
   const container = document.getElementById("script-container");
   if (!container) {
-    console.log("[CO] no script-container");
+    // Unreachable after a passing runPreFlight, but guards against races.
+    logBrokenCompatibility("mountCheckoutUI", { problem: "#script-container disappeared after pre-flight", expected: "element present", actual: "null" });
     return;
   }
 
@@ -332,15 +433,15 @@ padding-top:0 !important;
 .prog-checkout { --prog-green: #3D5C2A; --prog-green-save: #4F8A37; --prog-ink: #1C1C1A; --prog-muted: #5B6470; --prog-bd: #E7E7E4; --prog-radio-off: #AEB1B8; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 100%; background: transparent; color: var(--prog-ink); }
 .prog-checkout, .prog-checkout * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
 .prog-head { text-align: center;  }
-.prog-title { font-size: 23px; font-weight: 700; line-height: 1.22; letter-spacing: -.2px; }
+.prog-title { font-size: 26px; font-weight: 700; line-height: 1.22; letter-spacing: -.2px; }
 .prog-title .prog-g { color: var(--prog-green); }
 .prog-review { color: var(--prog-muted); font-size: 12.5px; font-weight: 500; line-height: 1.5; margin-top: 7px; padding: 0 8px; }
 .prog-stat { font-size: 12px; font-weight: 700; line-height: 1.4; margin-top: 9px; padding: 0 6px; }
 .prog-select { padding: 4px 0 0; }
 .prog-select h2 {text-align: center; font-size: 23px; font-weight: 700; letter-spacing: -.2px; }
 .prog-select p { color: var(--ink); font-size: 12.5px; font-weight: 500; margin-top: 3px; }
-.prog-plans { padding: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
-.prog-plan-card { position: relative; background: #fff; border: 1px solid var(--bd); border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.prog-plans { padding: 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.prog-plan-card { position: relative; background: #fff; border: 1px solid #C2C3BF; border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
 .prog-plan-card.prog-selected { border-color: var(--prog-green); background: #FBFCF8; }
 .prog-plan-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 20px; margin-bottom: 4px; font-size: 9px; font-weight: 700; letter-spacing: .3px; line-height: 1; padding: 4px 8px; border-radius: 5px; white-space: nowrap; }
 .prog-plan-badge.prog-green { background: var(--prog-green); color: #fff; }
@@ -390,8 +491,8 @@ padding-top:0 !important;
 .co-trust-t2 { font-size: 12px; font-weight: 400; color: var(--ink); margin-top: 2px; }
 
 
-.prog-fsa-row { margin: 14px 0 0; display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
-@media (max-width: 380px) { .prog-fsa-row { grid-template-columns: 1fr; } }
+.prog-fsa-row { margin: 14px 0 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 480px) { .prog-fsa-row { grid-template-columns: 1fr 1.3fr; } }
 .prog-fsa-box, .prog-pay-box { background: #F7F8F6; border: 1px solid var(--bd); border-radius: 12px; padding: 12px; min-width: 0; }
 .prog-fsa-box { display: flex; align-items: flex-start; gap: 12px; }
 .prog-fsa-icon { flex: none; padding-top: 2px; }
@@ -424,7 +525,7 @@ margin-left: auto;}
 .co-badge svg { width: 24px; height: 24px; color: var(--prog-green); flex: none; }
 .co-badge span { font-size: 8px; font-weight: 700; color: var(--prog-ink); text-align: left; line-height: 1.3; }
 .co-badge-div { width: 1px; height: 36px; background: #EAEAE7; flex: none; }
-#tzmd-sticky-bar {order:99999999999;margin-top:-33px !important; z-index: 9999;}
+#tzmd-sticky-bar {order:99999999999; z-index: 9999;}
 </style>
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
@@ -438,7 +539,7 @@ margin-left: auto;}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
     </div>
     <div>
-      <div class="co-trust-t1">No charge unless approved by your physician.</div>
+      <div class="co-trust-t1">No charge unless approved by a physician.</div>
       <div class="co-trust-t2">If approved, your treatment begins.</div>
     </div>
   </div>
@@ -460,14 +561,6 @@ margin-left: auto;}
     </div>
   </div>
 
-    <div class="co-testi">
-    <div class="co-avatar">RM</div>
-    <div>
-      <div class="co-stars" id="stars"></div>
-      <div class="co-quote">"Down 28 lbs in 3 months and my energy is back."</div>
-      <div class="co-by">— Rachel M., Dallas</div>
-    </div>
-  </div>
 </div>`;
 
   isMounted = true;
@@ -480,29 +573,60 @@ margin-left: auto;}
     wrap.innerHTML = plans.map(planHTML).join("");
   }
 
+  // Cleans up all mount-level DOM changes and resets state so Bask's native checkout is restored.
+  function abortMount() {
+    if (plansObserver) { plansObserver.disconnect(); plansObserver = null; }
+    container.innerHTML = '';
+    restoreOriginalSection();
+    isMounted = false;
+    plans = [];
+  }
+
   function initializePlans() {
     const cardsList = document.querySelectorAll(
       "ul.relative.mt-5.flex.flex-col.gap-3 > li",
     );
     console.log("[CO] initializePlans — cards found:", cardsList.length);
-    if (cardsList.length < 4) return false;
+    if (cardsList.length < 4) return false; // not ready yet — observer will retry
     const cardArr = [...cardsList];
     const foundTitles = cardArr.map(getCardTitle);
     console.log("[CO] card titles:", foundTitles);
     const required = ["Monthly", "Quarterly", "Six months", "Yearly"];
     const missing  = required.filter(n => !foundTitles.includes(n));
     if (missing.length) {
-      console.warn("[CO] missing Bask plan cards by title:", missing, "— found:", foundTitles);
-      return false;
+      logBrokenCompatibility("initializePlans", {
+        problem: "Required Bask plan card titles are missing or changed",
+        expected: required.join(", "),
+        actual: foundTitles.join(", ") || "(none found)"
+      });
+      return 'abort';
     }
-    plans = getPlans(cardArr);
+    const draftPlans = getPlans(cardArr);
+    const badPrices = draftPlans.filter(p => !Number.isFinite(p.price) || p.price <= 0);
+    if (badPrices.length) {
+      logBrokenCompatibility("initializePlans", {
+        problem: `Could not parse plan prices — Bask may have changed its price span markup`,
+        expected: "Positive finite price for all plans",
+        actual: badPrices.map(p => `${p.name}: ${p.price}`).join(", ")
+      });
+      return 'abort';
+    }
+    plans = draftPlans;
     render();
     return true;
   }
 
-  if (!initializePlans()) {
+  const _planResult = initializePlans();
+  if (_planResult === 'abort') {
+    abortMount();
+    return;
+  }
+  if (_planResult === false) {
     plansObserver = new MutationObserver(() => {
-      if (initializePlans()) {
+      const r = initializePlans();
+      if (r === 'abort') {
+        abortMount(); // abortMount handles plansObserver disconnect
+      } else if (r === true) {
         plansObserver.disconnect();
         plansObserver = null;
       }
@@ -555,14 +679,13 @@ margin-left: auto;}
     }
   });
 
-  document.getElementById("stars").innerHTML = STAR.repeat(5);
 
   function customizeBaskButton() {
     const LOCK_SVG = `<svg data-tzmd-lock="1" width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 13.05a1.5 1.5 0 1 0-1.5 0v.45a.75.75 0 0 0 1.5 0v-.45Z"/><path fill-rule="evenodd" d="M6.25 7.095v-.345a3.75 3.75 0 1 1 7.5 0v.345a3.001 3.001 0 0 1 2.25 2.905v4a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-4a3 3 0 0 1 2.25-2.905Zm1.5-.345a2.25 2.25 0 0 1 4.5 0v.25h-4.5v-.25Zm-2.25 3.25a1.5 1.5 0 0 1 1.5-1.5h6a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-6a1.5 1.5 0 0 1-1.5-1.5v-4Z"/></svg>`;
-    const OUR_HTML = `<div class="flex w-full items-center justify-center"><span class="flex items-center gap-1">${LOCK_SVG} Start My Treatment Plan</span></div>`;
+    const OUR_HTML = `<div class="flex w-full items-center justify-center"><span class="flex items-center gap-1">${LOCK_SVG} Continue to Doctor Review</span></div>`;
 
     const applyToButton = (btn) => {
-      if (btn.querySelector('[data-tzmd-lock="1"]') && btn.textContent.includes("Start My Treatment Plan")) return;
+      if (btn.querySelector('[data-tzmd-lock="1"]') && btn.textContent.includes("Continue to Doctor Review")) return;
       btn.innerHTML = OUR_HTML;
     };
 
@@ -625,17 +748,12 @@ margin-left: auto;}
   </div>
 </div>`;
 
-    const findBtn = () =>
-      [...document.querySelectorAll("button[type='submit']")].find(
-        (b) => b.textContent.includes("Start My Doctor Review") || b.textContent.includes("Start My Treatment Plan")
-      );
-
     const inject = () => {
       if (document.getElementById(STICKY_ID)) return;
-      const btn = findBtn();
-      if (!btn) return;
-      const target = btn.closest("section.relative.flex.w-full.shrink-0.flex-grow.flex-col")
-        || document.querySelector("section.relative.flex.w-full.shrink-0.flex-grow.flex-col");
+      // Inject into our plan picker (inside #script-container), NOT into paySection.
+      // paySection is now the CSS modal sheet — placing content there would show
+      // the sticky bar inside the modal, which is wrong.
+      const target = document.querySelector("#script-container .prog-checkout");
       if (!target) return;
       const tmp = document.createElement("div");
       tmp.innerHTML = STICKY_HTML;
@@ -652,18 +770,18 @@ margin-left: auto;}
   }
   injectStickyBar();
 
-  // TEMP: Production test restriction for Ehsanullah only.
-  // Remove this condition after the modal flow is approved.
   function initPaymentModal() {
-    if (window.baskPatientData?.firstName !== "Ehsanullah") return;
 
     // Find the Bask payment container — smallest ancestor of #payment-element
     // that also contains the submit button. Stops before document.body.
+    // Returns null if #payment-element has no height, which means Bask is showing
+    // a review/summary step (not the payment form) and we should wait.
     function findPaymentSection() {
       const payEl = document.getElementById("payment-element");
       const submitBtn = [...document.querySelectorAll('button[type="submit"]')]
         .find(b => /Treatment Plan|Doctor Review/i.test(b.textContent));
       if (!payEl || !submitBtn) return null;
+      if (payEl.offsetHeight === 0) return null; // payment form not visible yet
       let el = payEl.parentElement;
       while (el && el !== document.body) {
         if (el.contains(submitBtn)) return el;
@@ -673,27 +791,78 @@ margin-left: auto;}
     }
 
     function setup(paySection) {
-      // Insert a silent placeholder at the payment section's original DOM position
-      const placeholder = document.createElement("div");
-      placeholder.id = "tzmd-payment-placeholder";
-      paySection.parentElement.insertBefore(placeholder, paySection);
+      if (!paySection.isConnected) {
+        logBrokenCompatibility("setup", { problem: "paySection is not connected to the live document", expected: "paySection.isConnected === true", actual: "false" });
+        unmountCheckoutUI(); return;
+      }
+      if (!paySection.parentElement) {
+        logBrokenCompatibility("setup", { problem: "paySection.parentElement is null — cannot anchor placeholder", expected: "non-null parentElement", actual: "null" });
+        unmountCheckoutUI(); return;
+      }
+      if (!paySection.contains(document.getElementById("payment-element"))) {
+        logBrokenCompatibility("setup", { problem: "#payment-element is not a descendant of paySection", expected: "#payment-element inside paySection", actual: "not found" });
+        unmountCheckoutUI(); return;
+      }
+      const _setupSubmitBtn = [...paySection.querySelectorAll('button[type="submit"]')].find(b => /Treatment Plan|Doctor Review/i.test(b.textContent));
+      if (!_setupSubmitBtn) {
+        logBrokenCompatibility("setup", { problem: "Submit button not found inside paySection", expected: 'button[type="submit"] matching /Treatment Plan|Doctor Review/i', actual: "not found" });
+        unmountCheckoutUI(); return;
+      }
+      // Accumulate undo steps as DOM mutations happen; executed in reverse on any error.
+      const _undo = [];
+      const _onErr = (err) => {
+        logBrokenCompatibility("setup", { problem: (err && err.message) || String(err), fallback: "Rolling back all modal DOM changes — Bask native checkout will be restored" });
+        for (let i = _undo.length - 1; i >= 0; i--) {
+          try { _undo[i](); } catch (e) { console.error("[CO] rollback error at step", i, ":", e); }
+        }
+        unmountCheckoutUI();
+      };
+      try {
 
-      // Inject modal CSS
+      // Mutable box so all closures (openModal, closeModal, hideBaskTotal, etc.)
+      // always operate on the CURRENT live SECTION even after Bask replaces it.
+      const payRef = { current: paySection };
+
+      // Inject modal CSS.
+      // IMPORTANT: paySection is NOT moved in the DOM — React owns it and moving it
+      // causes reconciliation crashes (removeChild on wrong parent) when Bask updates
+      // its state (e.g. removing a discount). Instead we use CSS to make paySection
+      // appear as a modal sheet via .tzmd-pay-sheet, keeping the React tree intact.
       const style = document.createElement("style");
       style.id = "tzmd-modal-style";
       style.textContent = `
         #tzmd-modal-overlay {
-          display: none; position: fixed; inset: 0; z-index: 99999;
-          align-items: center; justify-content: center;
+          display: none; position: fixed; inset: 0; z-index: 99998;
+          background: rgba(0,0,0,0.55);
         }
-        #tzmd-modal-overlay.tzmd-open { display: flex; }
-        #tzmd-modal-backdrop {
-          position: absolute; inset: 0; background: rgba(0,0,0,0.55);
+        #tzmd-modal-overlay.tzmd-open { display: block; }
+        .tzmd-pay-sheet {
+          position: fixed !important;
+          bottom: 0 !important; left: 0 !important; right: 0 !important;
+          z-index: 99999 !important;
+          background: #fff !important;
+          max-height: 90vh !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important; -webkit-overflow-scrolling: touch !important;
+          border-radius: 20px 20px 0 0 !important;
+          box-shadow: 0 -4px 32px rgba(0,0,0,0.18) !important;
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          width: 100% !important;
         }
-        #tzmd-modal-box {
-          position: relative; background: #fff; border-radius: 16px;
-          width: 92%; max-width: 520px; max-height: 90vh;
-          overflow-y: auto; -webkit-overflow-scrolling: touch; z-index: 1;
+        @media (min-width: 601px) {
+          .tzmd-pay-sheet {
+            border-radius: 16px !important;
+            bottom: auto !important; left: 50% !important; right: auto !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: 92% !important; max-width: 520px !important;
+          }
+        }
+        /* Hide our plan-picker UI behind the overlay when modal is open */
+        body.tzmd-modal-open #script-container {
+          visibility: hidden !important;
+          pointer-events: none !important;
         }
         #tzmd-modal-header {
           display: flex; align-items: center; justify-content: space-between;
@@ -701,7 +870,7 @@ margin-left: auto;}
           z-index: 2; border-bottom: 1px solid #EAEAE7;
         }
         #tzmd-modal-title {
-          font-family: 'Poppins', sans-serif; font-size: 15px; font-weight: 700;
+          font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700;
           color: #1A1A18;
         }
         #tzmd-modal-close {
@@ -709,88 +878,448 @@ margin-left: auto;}
           cursor: pointer; color: #888; padding: 4px 8px;
         }
         #tzmd-modal-close:hover { color: #1A1A18; }
-        #tzmd-modal-inner { padding: 16px 16px 28px; }
+        #tzmd-modal-inner { padding: 16px 16px 4px; }
         body.tzmd-modal-open { overflow: hidden !important; }
         #tzmd-pay-btn {
           width: 100%; display: flex; align-items: center; justify-content: center;
-          gap: 12px; background: #1A1A18; color: #fff; border: none;
-          border-radius: 12px; padding: 15px 24px; margin-top: 14px;
+          gap: 16px; background: #1A1A18; color: #fff; border: none;
+          border-radius: 14px; padding: 20px 28px; margin: 14px 0 18px;
           font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          font-size: 14px; font-weight: 600; letter-spacing: .1px; line-height: 1;
-          cursor: pointer; transition: background .15s ease, transform .1s ease;
+          font-size: 16px; font-weight: 700; letter-spacing: .1px; line-height: 1;
+          cursor: pointer; transition: background .15s ease, transform .1s ease, box-shadow .15s ease;
           -webkit-font-smoothing: antialiased;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.22);
         }
         #tzmd-pay-btn svg { flex: none; opacity: 0.88; }
-        #tzmd-pay-btn:hover { background: #3a3a38; }
+        #tzmd-pay-btn:hover { background: #3a3a38; box-shadow: 0 6px 18px rgba(0,0,0,0.28); }
         #tzmd-pay-btn:focus-visible { outline: 2px solid rgba(255,255,255,0.45); outline-offset: 3px; }
-        #tzmd-pay-btn:active { transform: translateY(1px); }
-        @media (max-width: 600px) {
-          #tzmd-modal-overlay.tzmd-open { align-items: flex-end; }
-          #tzmd-modal-box {
-            width: 100%; max-width: 100%; max-height: 95vh;
-            border-radius: 20px 20px 0 0;
+        #tzmd-pay-btn:active { transform: translateY(1px); box-shadow: 0 2px 8px rgba(0,0,0,0.16); }
+        #tzmd-pay-btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+        #tzmd-plan-summary { background: #FBFCF8; border: 1px solid #3D5C2A; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
+        .tzmd-ps-hdr { font-size: 10px; font-weight: 600; color: #6B7280; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
+        .tzmd-ps-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+        .tzmd-ps-name { font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 700; color: #1A1A18; line-height: 1.25; }
+        .tzmd-ps-freq { font-size: 12px; font-weight: 400; color: #6B7280; margin-top: 3px; line-height: 1.4; }
+        .tzmd-ps-right { text-align: right; flex-shrink: 0; }
+        .tzmd-ps-amt { font-family: 'Poppins', sans-serif; font-size: 18px; font-weight: 700; color: #1A1A18; white-space: nowrap; line-height: 1.15; }
+        .tzmd-ps-amt-orig { font-size: 13px; font-weight: 500; color: #9CA3AF; text-decoration: line-through; margin-right: 2px; }
+        .tzmd-ps-lbl { display: inline-block; margin-top: 5px; background: #EEF3EA; color: #2F5A2A; font-size: 10.5px; font-weight: 500; line-height: 1.3; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+        .tzmd-ps-change { margin-top: 6px; }
+        @media (max-width: 400px) {
+          .tzmd-ps-row { flex-direction: column; gap: 6px; }
+          .tzmd-ps-right { text-align: left; }
+        }
+        #tzmd-change-plan { background: none; border: none; padding: 0; font-size: 12px; font-weight: 500; color: #3D5C2A; cursor: pointer; text-decoration: underline; font-family: 'Poppins', sans-serif; }
+        #tzmd-change-plan:hover { opacity: .75; }
+        .tzmd-modal-trust { display: flex; align-items: center; gap: 12px; background: #EEF3EA; border: 1px solid #D4E8C8; border-radius: 12px; padding: 11px 14px; margin-bottom: 14px; }
+        .tzmd-modal-trust svg { width: 28px; height: 28px; color: #1F4220; flex: none; }
+        .tzmd-modal-trust-t1 { font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 600; color: #1F4220; line-height: 1.3; }
+        .tzmd-modal-trust-t2 { font-family: 'Poppins', sans-serif; font-size: 11.5px; font-weight: 400; color: #2C3020; margin-top: 3px; line-height: 1.45; }
+        @keyframes tzmd-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.38; } }
+        #tzmd-loading-shell {
+          display: none; position: fixed;
+          bottom: 0; left: 0; right: 0; z-index: 99999;
+          background: #fff; max-height: 90vh; overflow: hidden;
+          border-radius: 20px 20px 0 0;
+          box-shadow: 0 -4px 32px rgba(0,0,0,0.18);
+          box-sizing: border-box; width: 100%;
+        }
+        @media (min-width: 601px) {
+          #tzmd-loading-shell {
+            border-radius: 16px; bottom: auto; left: 50%; right: auto;
+            top: 50%; transform: translate(-50%, -50%);
+            width: 92%; max-width: 520px;
           }
         }
+        #tzmd-loading-shell.tzmd-ls-open { display: block; }
+        .tzmd-skel { background: #EDEDEB; border-radius: 8px; animation: tzmd-pulse 1.4s ease-in-out infinite; }
       `;
       document.head.appendChild(style);
+      _undo.push(() => style.remove());
 
-      // Build modal overlay
+      // Full-screen backdrop overlay (paySection is NOT moved into this — see comment above)
       const overlay = document.createElement("div");
       overlay.id = "tzmd-modal-overlay";
-      overlay.innerHTML = `
-        <div id="tzmd-modal-backdrop"></div>
-        <div id="tzmd-modal-box">
-          <div id="tzmd-modal-header">
-            <span id="tzmd-modal-title">Complete Your Order</span>
-            <button id="tzmd-modal-close" aria-label="Close payment form">✕</button>
-          </div>
-          <div id="tzmd-modal-inner"></div>
+      document.body.appendChild(overlay);
+      _undo.push(() => overlay.remove());
+
+      // Loading skeleton — shown while Bask remounts the payment section after discount removal.
+      // Keeps the overlay visible so the user never sees the page flash underneath.
+      const loadingShell = document.createElement("div");
+      loadingShell.id = "tzmd-loading-shell";
+      loadingShell.innerHTML = `
+        <div style="display:flex;align-items:center;padding:14px 16px 12px;border-bottom:1px solid #EAEAE7;">
+          <span style="font-family:'Poppins',sans-serif;font-size:17px;font-weight:700;color:#1A1A18;">Complete Your Order</span>
+        </div>
+        <div style="padding:20px 16px;display:flex;flex-direction:column;gap:12px;">
+          <div class="tzmd-skel" style="height:14px;width:55%"></div>
+          <div class="tzmd-skel" style="height:14px;width:90%"></div>
+          <div class="tzmd-skel" style="height:14px;width:70%;margin-top:4px"></div>
+          <div class="tzmd-skel" style="height:20px;width:100%;margin-top:8px"></div>
+          <div class="tzmd-skel" style="height:52px;width:100%;border-radius:12px;margin-top:4px"></div>
+        </div>`;
+      document.body.appendChild(loadingShell);
+      _undo.push(() => loadingShell.remove());
+
+      // Inject our header directly into paySection (before Bask's React-managed children).
+      // React ignores DOM nodes it did not create, so these are safe to prepend.
+      // Use <header> (not <div>) so React's type-matching detects a mismatch
+      // and removes (rather than reuses) this node during reconciliation — which
+      // fires our childList MutationObserver so we can immediately re-inject it.
+      const headerEl = document.createElement("header");
+      headerEl.id = "tzmd-modal-header";
+      headerEl.innerHTML = `<span id="tzmd-modal-title">Complete Your Order</span><button id="tzmd-modal-close" aria-label="Close payment form">✕</button>`;
+      paySection.insertBefore(headerEl, paySection.firstChild);
+      _undo.push(() => headerEl.remove());
+
+      // Wrapper with padding that holds our plan summary + trust card
+      // Use <aside> for same reason — distinct type prevents React from reusing the node.
+      const modalInner = document.createElement("aside");
+      modalInner.id = "tzmd-modal-inner";
+      paySection.insertBefore(modalInner, headerEl.nextSibling);
+      _undo.push(() => modalInner.remove());
+
+      // Explicitly override the parent section's visibility:hidden so paySection
+      // can show through once it gets position:fixed via .tzmd-pay-sheet.
+      paySection.style.setProperty('visibility', 'visible', 'important');
+      _undo.push(() => paySection.style.removeProperty('visibility'));
+
+      // Hide paySection until the modal is opened — it should never be visible inline.
+      paySection.style.setProperty('display', 'none', 'important');
+      _undo.push(() => paySection.style.removeProperty('display'));
+
+      // Apply horizontal padding to Bask's native children inside the sheet.
+      // CSS child-combinator rules are unreliable when Bask uses Tailwind's
+      // !important mode — inline style assignment beats all external rules.
+      // Skip the full-width submit button wrapper (it uses negative margins intentionally).
+      const _paddedBaskChildren = [];
+      for (const child of paySection.children) {
+        if (child === headerEl || child === modalInner) continue;
+        child.style.paddingLeft = '16px';
+        child.style.paddingRight = '16px';
+        child.style.boxSizing = 'border-box';
+        _paddedBaskChildren.push(child);
+      }
+      _undo.push(() => {
+        _paddedBaskChildren.forEach(c => {
+          c.style.paddingLeft = '';
+          c.style.paddingRight = '';
+          c.style.boxSizing = '';
+        });
+      });
+
+      // Plan summary card
+      function getPlanDisplayInfo(sel) {
+        const m = sel.billed.match(/^(.+?)\s*\(\$([\d,.]+)\s*total\)/);
+        return m ? { freq: m[1].trim(), totalAmt: '$' + m[2] } : { freq: sel.billed, totalAmt: '$' + sel.price.toFixed(2) };
+      }
+      const summaryEl = document.createElement('div');
+      summaryEl.id = 'tzmd-plan-summary';
+      summaryEl.innerHTML = `
+        <div class="tzmd-ps-hdr">Selected treatment plan</div>
+        <div class="tzmd-ps-row">
+          <div style="min-width:0"><div class="tzmd-ps-name"></div><div class="tzmd-ps-freq"></div><div class="tzmd-ps-change"><button id="tzmd-change-plan">Change plan</button></div></div>
+          <div class="tzmd-ps-right"><div class="tzmd-ps-amt"></div><div class="tzmd-ps-lbl">Total if approved by a physician</div></div>
         </div>
       `;
-      document.body.appendChild(overlay);
+      modalInner.appendChild(summaryEl);
 
-      // Move payment section into modal once — stays there permanently.
-      // Stripe iframes live on <body> and communicate via postMessage;
-      // moving #payment-element does not affect iframe connections.
-      const modalInner = document.getElementById("tzmd-modal-inner");
-      modalInner.appendChild(paySection);
-      console.log("[CO-MODAL] payment section moved into modal ✓");
+      let baskDiscountedTotal = null;
+      let baskOriginalTotal = null;
+
+      function renderPlanSummary() {
+        const sel = plans.find(p => p.selected) || plans[0];
+        if (!sel) return;
+        const { freq, totalAmt } = getPlanDisplayInfo(sel);
+        summaryEl.querySelector('.tzmd-ps-name').textContent = 'Tirzepatide — ' + sel.name + ' plan';
+        summaryEl.querySelector('.tzmd-ps-freq').textContent = freq;
+        const amtEl = summaryEl.querySelector('.tzmd-ps-amt');
+        if (baskDiscountedTotal && baskOriginalTotal) {
+          amtEl.innerHTML = `<span class="tzmd-ps-amt-orig">${baskOriginalTotal}</span> ${baskDiscountedTotal}`;
+        } else {
+          amtEl.textContent = baskDiscountedTotal || totalAmt;
+        }
+      }
+      renderPlanSummary();
+
+      // Green reassurance card
+      const trustEl = document.createElement('div');
+      trustEl.className = 'tzmd-modal-trust';
+      trustEl.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+        <div>
+          <div class="tzmd-modal-trust-t1">No charge unless approved by a physician.</div>
+          <div class="tzmd-modal-trust-t2">You'll only be charged after the prescription is approved.</div>
+        </div>
+      `;
+      modalInner.appendChild(trustEl);
+
+      // Hide Bask's standalone "Total (If approved):" row — our summary replaces it.
+      // Queries paySection directly since paySection was NOT moved into modalInner.
+      function hideBaskTotal() {
+        const ps = payRef.current;
+        for (const el of ps.querySelectorAll('span.font-brand-header, span')) {
+          if (!el.children.length && el.textContent.trim() === 'Total (If approved):') {
+            let row = el;
+            for (let i = 0; i < 2 && row.parentElement && row.parentElement !== ps; i++) row = row.parentElement;
+            if (row !== el) {
+              const priceEls = [...row.querySelectorAll('span')].filter(s =>
+                !s.children.length && /^\$[\d,]+\.\d{2}$/.test(s.textContent.trim())
+              );
+              if (priceEls.length) {
+                const latest = priceEls[priceEls.length - 1].textContent.trim();
+                const original = priceEls.length > 1 ? priceEls[0].textContent.trim() : null;
+                if (latest !== baskDiscountedTotal || original !== baskOriginalTotal) {
+                  baskDiscountedTotal = latest;
+                  baskOriginalTotal = original;
+                  renderPlanSummary();
+                }
+              }
+              row.style.setProperty('display', 'none', 'important');
+            }
+            return;
+          }
+        }
+      }
+      hideBaskTotal();
+      const totalHideObs = new MutationObserver(hideBaskTotal);
+      totalHideObs.observe(paySection, { childList: true, subtree: true });
+      addObserver(totalHideObs);
+
+      // Hide Bask's "Card Details" label
+      function hideCardDetails() {
+        const ps = payRef.current;
+        for (const el of ps.querySelectorAll('p, h2, h3, h4, span, div')) {
+          if (el.childElementCount === 0 && el.textContent.trim() === 'Card Details' && !el.dataset.tzmdCdHidden) {
+            el.dataset.tzmdCdHidden = '1';
+            el.style.setProperty('display', 'none', 'important');
+          }
+        }
+      }
+      hideCardDetails();
+      const cardDetailsObs = new MutationObserver(hideCardDetails);
+      cardDetailsObs.observe(paySection, { childList: true, subtree: true });
+      addObserver(cardDetailsObs);
+
+      // Raise Bask's native dialogs (e.g. "Remove discount?") above our modal.
+      const baskDialogObs = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            if (node.id === 'tzmd-modal-overlay') continue;
+            const cs = window.getComputedStyle(node);
+            if (cs.position === 'fixed') {
+              node.style.setProperty('z-index', '999999', 'important');
+            }
+            node.querySelectorAll('[role="dialog"]').forEach(d => {
+              d.style.setProperty('z-index', '999999', 'important');
+              if (d.parentElement && d.parentElement !== document.body) {
+                d.parentElement.style.setProperty('z-index', '999999', 'important');
+              }
+            });
+          }
+        }
+      });
+      baskDialogObs.observe(document.body, { childList: true });
+      addObserver(baskDialogObs);
 
       // Inject trigger button
       const btnWrap = document.getElementById("tzmd-pay-btn-wrap");
       if (btnWrap) {
-        const CARD = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
-        btnWrap.innerHTML = `<button id="tzmd-pay-btn">${CARD}Add Payment Method</button>`;
+        const CARD = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`;
+        btnWrap.innerHTML = `<button id="tzmd-pay-btn">${CARD}Add Payment Method &amp; Continue</button>`;
       }
 
       function openModal() {
+        renderPlanSummary();
+        // Re-suppress Bask content before the section becomes visible to avoid a paint flash.
+        hideBaskTotal();
+        hideCardDetails();
+        applyBaskHides(payRef.current);
+        if (hiddenSection) hiddenSection.removeAttribute('inert');
+        _scrollLocked = false;
+        payRef.current.style.removeProperty('display');
         overlay.classList.add("tzmd-open");
+        payRef.current.classList.add("tzmd-pay-sheet");
         document.body.classList.add("tzmd-modal-open");
       }
 
       function closeModal() {
         overlay.classList.remove("tzmd-open");
+        payRef.current.classList.remove("tzmd-pay-sheet");
+        payRef.current.style.setProperty('display', 'none', 'important');
         document.body.classList.remove("tzmd-modal-open");
+        if (hiddenSection) hiddenSection.setAttribute('inert', '');
+        _scrollLocked = true;
       }
 
       const payBtn = document.getElementById("tzmd-pay-btn");
       if (payBtn) addListener(payBtn, "click", openModal);
 
       const closeBtn = document.getElementById("tzmd-modal-close");
-      const backdrop = document.getElementById("tzmd-modal-backdrop");
+      const changePlanBtn = document.getElementById("tzmd-change-plan");
       if (closeBtn) addListener(closeBtn, "click", closeModal);
-      if (backdrop) addListener(backdrop, "click", closeModal);
+      addListener(overlay, "click", closeModal);
+      if (changePlanBtn) addListener(changePlanBtn, "click", closeModal);
       addListener(document, "keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
-      // Store cleanup so unmount can restore the payment section to its original position
+      // Store cleanup so unmount can remove our injected elements and restore classes
       window.__TZMD__._modalCleanup = () => {
-        placeholder.parentElement?.insertBefore(paySection, placeholder);
-        placeholder.remove();
+        headerEl.remove();
+        modalInner.remove(); // also removes summaryEl + trustEl inside it
         overlay.remove();
+        loadingShell.remove();
         style.remove();
+        payRef.current.classList.remove("tzmd-pay-sheet");
+        payRef.current.style.removeProperty('display');
         document.body.classList.remove("tzmd-modal-open");
+        if (hiddenSection) {
+          hiddenSection.style.removeProperty('visibility');
+          hiddenSection.removeAttribute('inert');
+        }
+        _scrollLocked = false;
+        unlockQC();
         delete window.__TZMD__._modalCleanup;
       };
+      console.log("[CO-MODAL] modal wired ✓ (paySection stays in original DOM position)");
+
+      // Re-inject our header/inner if React removes them during a re-render (e.g. discount removal).
+      // _modalCleanup deletes itself, so checking for it avoids re-injecting after intentional cleanup.
+      const reinjectionObs = new MutationObserver(() => {
+        if (!window.__TZMD__._modalCleanup) return; // cleanup already ran — don't re-inject
+        const ps = payRef.current;
+        if (!ps.contains(headerEl)) {
+          ps.insertBefore(headerEl, ps.firstChild);
+          ps.insertBefore(modalInner, headerEl.nextSibling);
+          hideBaskTotal();
+          hideCardDetails();
+          applyBaskHides(ps);
+        }
+        // Reapply side-padding to any new/replaced Bask children (e.g. after discount apply).
+        // Bask replaces children in-place when applying a discount, so the new children
+        // arrive without our padding styles.
+        for (const child of ps.children) {
+          if (child !== headerEl && child !== modalInner) {
+            child.style.paddingLeft = '16px';
+            child.style.paddingRight = '16px';
+            child.style.boxSizing = 'border-box';
+          }
+        }
+      });
+      reinjectionObs.observe(paySection, { childList: true });
+      addObserver(reinjectionObs);
+
+      // Bask sometimes replaces the SECTION element entirely (not just its children)
+      // after significant re-renders like actual discount removal confirmation.
+      // reinjectionObs only watches children — this observer watches the parent so
+      // we detect when paySection is removed and re-graft onto the new SECTION.
+      function applyToNewPaySection(newPay) {
+        // Guard: after Bask's discount-removal remount, findPaymentSection() may walk up
+        // too far and return the outer section.relative (hiddenSection) instead of the
+        // focused payment-form wrapper. Injecting into the outer section would make the
+        // entire Bask checkout (review content, promo copy, etc.) appear inside our modal.
+        // Reject any element that IS or is a direct child of the outer section.
+        if (newPay === hiddenSection || newPay.parentElement === hiddenSection) {
+          // Wrong element — Bask is mid-remount (e.g. after discount removal). Keep the backdrop
+          // open and show a loading skeleton so the user never sees the page underneath.
+          loadingShell.classList.add("tzmd-ls-open");
+          if (hiddenSection) hiddenSection.setAttribute('inert', '');
+          const waitForPayStep = new MutationObserver(() => {
+            if (!window.__TZMD__._modalCleanup) { waitForPayStep.disconnect(); return; }
+            // Outer section gone → SPA moved on, close modal
+            if (hiddenSection && !hiddenSection.isConnected) {
+              waitForPayStep.disconnect();
+              loadingShell.classList.remove("tzmd-ls-open");
+              if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
+              return;
+            }
+            const ps = findPaymentSection();
+            if (ps && ps !== hiddenSection && ps.parentElement !== hiddenSection) {
+              waitForPayStep.disconnect();
+              loadingShell.classList.remove("tzmd-ls-open");
+              applyToNewPaySection(ps);
+            }
+          });
+          waitForPayStep.observe(document.body, { childList: true, subtree: true });
+          return;
+        }
+
+        payRef.current = newPay;
+        newPay.style.setProperty('visibility', 'visible', 'important');
+        if (hiddenSection) hiddenSection.removeAttribute('inert');
+        newPay.classList.add("tzmd-pay-sheet");
+        newPay.style.removeProperty('display');
+        newPay.insertBefore(headerEl, newPay.firstChild);
+        newPay.insertBefore(modalInner, headerEl.nextSibling);
+
+        // Re-apply side-padding to Bask's direct children (same padding applied in initial setup).
+        for (const child of newPay.children) {
+          if (child !== headerEl && child !== modalInner) {
+            child.style.paddingLeft = "16px";
+            child.style.paddingRight = "16px";
+            child.style.boxSizing = "border-box";
+          }
+        }
+
+        // Reset cached Bask totals — the discount was removed so both values are stale.
+        // renderPlanSummary will fall back to the plan's base price; totalHideObs will
+        // update it again once Bask renders the new total row in the fresh SECTION.
+        baskDiscountedTotal = null;
+        baskOriginalTotal = null;
+        renderPlanSummary();
+        totalHideObs.disconnect();
+        totalHideObs.observe(newPay, { childList: true, subtree: true });
+        cardDetailsObs.disconnect();
+        cardDetailsObs.observe(newPay, { childList: true, subtree: true });
+        reinjectionObs.disconnect();
+        reinjectionObs.observe(newPay, { childList: true });
+        hideBaskTotal();
+        hideCardDetails();
+        applyBaskHides(newPay);
+        payReplaceObs.disconnect();
+        if (newPay.parentElement) payReplaceObs.observe(newPay.parentElement, { childList: true });
+      }
+      const payReplaceObs = new MutationObserver(() => {
+        if (!window.__TZMD__._modalCleanup) return;
+        if (payRef.current.isConnected) return; // SECTION still in DOM, nothing to do
+        const newPay = findPaymentSection();
+        if (newPay) {
+          applyToNewPaySection(newPay);
+        } else {
+          // If the outer Bask section itself is gone, the SPA navigated to the next step
+          // (e.g. after payment submission). Close the modal instead of showing a skeleton.
+          if (hiddenSection && !hiddenSection.isConnected) {
+            if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
+            return;
+          }
+          // #payment-element not ready yet (Stripe remounting) — show skeleton immediately
+          // so the overlay has a white panel instead of just a gray void.
+          loadingShell.classList.add("tzmd-ls-open");
+          const waitForReplace = new MutationObserver(() => {
+            if (!window.__TZMD__._modalCleanup) { waitForReplace.disconnect(); return; }
+            // Outer section gone → SPA moved on, close modal
+            if (hiddenSection && !hiddenSection.isConnected) {
+              waitForReplace.disconnect();
+              loadingShell.classList.remove("tzmd-ls-open");
+              if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
+              return;
+            }
+            const ps = findPaymentSection();
+            if (ps) {
+              waitForReplace.disconnect();
+              loadingShell.classList.remove("tzmd-ls-open");
+              applyToNewPaySection(ps);
+            }
+          });
+          waitForReplace.observe(document.body, { childList: true, subtree: true });
+        }
+      });
+      if (paySection.parentElement) {
+        payReplaceObs.observe(paySection.parentElement, { childList: true });
+        addObserver(payReplaceObs);
+      }
+
+      } catch (err) { _onErr(err); } // rolls back all DOM changes on any setup failure
     } // end setup()
 
     // Try immediately; if Stripe hasn't mounted #payment-element yet, wait for it.
@@ -868,10 +1397,14 @@ let syncTimer = null;
 function debouncedSync() {
   // Unmount immediately — don't wait for debounce
   if (isMounted && !isCheckoutPage()) {
+    // Don't unmount while the modal is open — Bask's React briefly removes
+    // DOM nodes during discount re-renders, causing isCheckoutPage() to
+    // return false for a split second even though the user is still on checkout.
+    if (document.getElementById("tzmd-modal-overlay")?.classList.contains("tzmd-open")) return;
     unmountCheckoutUI();
     return;
   }
-  // Hide immediately to prevent flash — full mount is debounced below
+  // Hide immediately to prevent flash — full mount is debounced below (gated users only)
   if (isCheckoutPage()) hideOriginalSection();
   // Debounce mount only, to avoid thrashing during React's initial render
   // clearTimeout(syncTimer);
