@@ -372,10 +372,10 @@ function runPreFlight() {
     return { ok: false, source: 'runPreFlight', problem: 'section.relative not found inside Bask container', expected: 'section.relative inside nextElementSibling of #script-container', actual: `nextElementSibling tag=${next.tagName} class="${next.className}"` };
   }
   const totalLabel = [...document.querySelectorAll("span.font-brand-header")].find(
-    el => el.textContent.trim() === "Total (If approved):"
+    el => el.textContent.trim() === "Total if prescribed"
   );
   if (!totalLabel) {
-    return { ok: false, source: 'runPreFlight', problem: 'Bask "Total (If approved):" label not found', expected: 'span.font-brand-header with text "Total (If approved):"', actual: 'not found' };
+    return { ok: false, source: 'runPreFlight', problem: 'Bask "Total if prescribed" label not found', expected: 'span.font-brand-header with text "Total if prescribed"', actual: 'not found' };
   }
   return { ok: true };
 }
@@ -691,7 +691,7 @@ margin-left: auto;}
 
     const attachObserver = () => {
       const baskBtn = [...document.querySelectorAll("button[type='submit']")].find(
-        (b) => b.textContent.includes("Start My Doctor Review") || b.textContent.includes("Start My Treatment Plan")
+        (b) => b.textContent.includes("Confirm and continue")
       );
       if (!baskBtn) return false;
 
@@ -779,9 +779,9 @@ margin-left: auto;}
     function findPaymentSection() {
       const payEl = document.getElementById("payment-element");
       const submitBtn = [...document.querySelectorAll('button[type="submit"]')]
-        .find(b => /Treatment Plan|Doctor Review/i.test(b.textContent));
+        .find(b => /Confirm and continue|Doctor Review/i.test(b.textContent));
       if (!payEl || !submitBtn) return null;
-      if (payEl.offsetHeight === 0) return null; // payment form not visible yet
+      if (!payEl.querySelector('iframe') && payEl.offsetHeight === 0) return null; // payment form not visible yet
       let el = payEl.parentElement;
       while (el && el !== document.body) {
         if (el.contains(submitBtn)) return el;
@@ -803,9 +803,9 @@ margin-left: auto;}
         logBrokenCompatibility("setup", { problem: "#payment-element is not a descendant of paySection", expected: "#payment-element inside paySection", actual: "not found" });
         unmountCheckoutUI(); return;
       }
-      const _setupSubmitBtn = [...paySection.querySelectorAll('button[type="submit"]')].find(b => /Treatment Plan|Doctor Review/i.test(b.textContent));
+      const _setupSubmitBtn = [...paySection.querySelectorAll('button[type="submit"]')].find(b => /Confirm and continue|Doctor Review/i.test(b.textContent));
       if (!_setupSubmitBtn) {
-        logBrokenCompatibility("setup", { problem: "Submit button not found inside paySection", expected: 'button[type="submit"] matching /Treatment Plan|Doctor Review/i', actual: "not found" });
+        logBrokenCompatibility("setup", { problem: "Submit button not found inside paySection", expected: 'button[type="submit"] matching /Confirm and continue/i', actual: "not found" });
         unmountCheckoutUI(); return;
       }
       // Accumulate undo steps as DOM mutations happen; executed in reverse on any error.
@@ -1058,12 +1058,12 @@ margin-left: auto;}
       `;
       modalInner.appendChild(trustEl);
 
-      // Hide Bask's standalone "Total (If approved):" row — our summary replaces it.
+      // Hide Bask's standalone "Total if prescribed" row — our summary replaces it.
       // Queries paySection directly since paySection was NOT moved into modalInner.
       function hideBaskTotal() {
         const ps = payRef.current;
         for (const el of ps.querySelectorAll('span.font-brand-header, span')) {
-          if (!el.children.length && el.textContent.trim() === 'Total (If approved):') {
+          if (!el.children.length && el.textContent.trim() === 'Total if prescribed') {
             let row = el;
             for (let i = 0; i < 2 && row.parentElement && row.parentElement !== ps; i++) row = row.parentElement;
             if (row !== el) {
@@ -1379,7 +1379,7 @@ function unmountCheckoutUI() {
 // ─── PAGE DETECTION ───────────────────────────────────────────────────────────
 function isCheckoutPage() {
   return !![...document.querySelectorAll("span.font-brand-header")].find(
-    (el) => el.textContent.trim() === "Total (If approved):"
+    (el) => el.textContent.trim() === "Total if prescribed"
   );
 }
 

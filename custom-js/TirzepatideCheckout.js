@@ -841,7 +841,7 @@ margin-left: auto;}
           bottom: 0 !important; left: 0 !important; right: 0 !important;
           z-index: 99999 !important;
           background: #fff !important;
-          max-height: 90vh !important;
+          max-height: 90dvh !important;
           overflow-x: hidden !important;
           overflow-y: auto !important; -webkit-overflow-scrolling: touch !important;
           border-radius: 20px 20px 0 0 !important;
@@ -882,13 +882,17 @@ margin-left: auto;}
         body.tzmd-modal-open { overflow: hidden !important; }
         #tzmd-pay-btn {
           width: 100%; display: flex; align-items: center; justify-content: center;
-          gap: 16px; background: #1A1A18; color: #fff; border: none;
-          border-radius: 14px; padding: 20px 28px; margin: 14px 0 18px;
+          gap: 10px; background: #1A1A18; color: #fff; border: none;
+          border-radius: 14px; padding: 20px 16px; margin: 14px 0 18px;
           font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          font-size: 16px; font-weight: 700; letter-spacing: .1px; line-height: 1;
+          font-size: 16px; font-weight: 700; letter-spacing: .1px; line-height: 1.25;
+          white-space: normal; word-break: break-word; text-align: center;
           cursor: pointer; transition: background .15s ease, transform .1s ease, box-shadow .15s ease;
           -webkit-font-smoothing: antialiased;
           box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+        }
+        @media (min-width: 400px) {
+          #tzmd-pay-btn { gap: 16px; padding: 20px 28px; }
         }
         #tzmd-pay-btn svg { flex: none; opacity: 0.88; }
         #tzmd-pay-btn:hover { background: #3a3a38; box-shadow: 0 6px 18px rgba(0,0,0,0.28); }
@@ -919,7 +923,7 @@ margin-left: auto;}
         #tzmd-loading-shell {
           display: none; position: fixed;
           bottom: 0; left: 0; right: 0; z-index: 99999;
-          background: #fff; max-height: 90vh; overflow: hidden;
+          background: #fff; max-height: 90dvh; overflow: hidden;
           border-radius: 20px 20px 0 0;
           box-shadow: 0 -4px 32px rgba(0,0,0,0.18);
           box-sizing: border-box; width: 100%;
@@ -1186,25 +1190,32 @@ margin-left: auto;}
       // Re-inject our header/inner if React removes them during a re-render (e.g. discount removal).
       // _modalCleanup deletes itself, so checking for it avoids re-injecting after intentional cleanup.
       const reinjectionObs = new MutationObserver(() => {
-        if (!window.__TZMD__._modalCleanup) return; // cleanup already ran — don't re-inject
+        if (!window.__TZMD__._modalCleanup) return;
         const ps = payRef.current;
-        if (!ps.contains(headerEl)) {
-          ps.insertBefore(headerEl, ps.firstChild);
-          ps.insertBefore(modalInner, headerEl.nextSibling);
-          hideBaskTotal();
-          hideCardDetails();
-          applyBaskHides(ps);
-        }
-        // Reapply side-padding to any new/replaced Bask children (e.g. after discount apply).
-        // Bask replaces children in-place when applying a discount, so the new children
-        // arrive without our padding styles.
-        for (const child of ps.children) {
-          if (child !== headerEl && child !== modalInner) {
-            child.style.paddingLeft = '16px';
-            child.style.paddingRight = '16px';
-            child.style.boxSizing = 'border-box';
+        // Defer to a microtask so React finishes its current commit phase before
+        // we re-insert our elements. Without this, our insertBefore calls land in
+        // the middle of React's reconciliation and cause NotFoundError crashes.
+        Promise.resolve().then(() => {
+          if (!window.__TZMD__._modalCleanup) return;
+          try {
+            if (!ps.contains(headerEl)) {
+              ps.insertBefore(headerEl, ps.firstChild);
+              ps.insertBefore(modalInner, headerEl.nextSibling);
+              hideBaskTotal();
+              hideCardDetails();
+              applyBaskHides(ps);
+            }
+            for (const child of ps.children) {
+              if (child !== headerEl && child !== modalInner) {
+                child.style.paddingLeft = '16px';
+                child.style.paddingRight = '16px';
+                child.style.boxSizing = 'border-box';
+              }
+            }
+          } catch (e) {
+            console.warn('[CO] reinjectionObs skipped — DOM not stable:', e.message);
           }
-        }
+        });
       });
       reinjectionObs.observe(paySection, { childList: true });
       addObserver(reinjectionObs);
@@ -1225,22 +1236,21 @@ margin-left: auto;}
           loadingShell.classList.add("tzmd-ls-open");
           if (hiddenSection) hiddenSection.setAttribute('inert', '');
           const waitForPayStep = new MutationObserver(() => {
-            if (!window.__TZMD__._modalCleanup) { waitForPayStep.disconnect(); return; }
-            // Outer section gone → SPA moved on, close modal
-            if (hiddenSection && !hiddenSection.isConnected) {
-              waitForPayStep.disconnect();
-              loadingShell.classList.remove("tzmd-ls-open");
-              if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
-              return;
-            }
+            if (!window.__TZMD__._modalCleanup) { waitForPayStep.disconnect(); clearTimeout(_psTimer); return; }
             const ps = findPaymentSection();
             if (ps && ps !== hiddenSection && ps.parentElement !== hiddenSection) {
               waitForPayStep.disconnect();
+              clearTimeout(_psTimer);
               loadingShell.classList.remove("tzmd-ls-open");
               applyToNewPaySection(ps);
             }
           });
           waitForPayStep.observe(document.body, { childList: true, subtree: true });
+          const _psTimer = setTimeout(() => {
+            waitForPayStep.disconnect();
+            loadingShell.classList.remove("tzmd-ls-open");
+            if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
+          }, 5000);
           return;
         }
 
@@ -1286,32 +1296,28 @@ margin-left: auto;}
         if (newPay) {
           applyToNewPaySection(newPay);
         } else {
-          // If the outer Bask section itself is gone, the SPA navigated to the next step
-          // (e.g. after payment submission). Close the modal instead of showing a skeleton.
-          if (hiddenSection && !hiddenSection.isConnected) {
-            if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
-            return;
-          }
-          // #payment-element not ready yet (Stripe remounting) — show skeleton immediately
-          // so the overlay has a white panel instead of just a gray void.
+          // paySection disconnected and no new payment section is ready yet.
+          // Show skeleton and wait — covers both discount-removal (Bask remounts the section)
+          // and SPA navigation after payment (no new section will appear).
+          // A 5s fallback closes the modal if no payment section reappears.
           loadingShell.classList.add("tzmd-ls-open");
+          let _replaceTimer = null;
           const waitForReplace = new MutationObserver(() => {
-            if (!window.__TZMD__._modalCleanup) { waitForReplace.disconnect(); return; }
-            // Outer section gone → SPA moved on, close modal
-            if (hiddenSection && !hiddenSection.isConnected) {
-              waitForReplace.disconnect();
-              loadingShell.classList.remove("tzmd-ls-open");
-              if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
-              return;
-            }
+            if (!window.__TZMD__._modalCleanup) { waitForReplace.disconnect(); clearTimeout(_replaceTimer); return; }
             const ps = findPaymentSection();
             if (ps) {
               waitForReplace.disconnect();
+              clearTimeout(_replaceTimer);
               loadingShell.classList.remove("tzmd-ls-open");
               applyToNewPaySection(ps);
             }
           });
           waitForReplace.observe(document.body, { childList: true, subtree: true });
+          _replaceTimer = setTimeout(() => {
+            waitForReplace.disconnect();
+            loadingShell.classList.remove("tzmd-ls-open");
+            if (window.__TZMD__._modalCleanup) window.__TZMD__._modalCleanup();
+          }, 5000);
         }
       });
       if (paySection.parentElement) {
