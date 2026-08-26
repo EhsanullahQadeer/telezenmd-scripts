@@ -65,6 +65,7 @@ console.log("[CO] script start — activePage:", window.__TZMD__.activePage);
 let hiddenSection = null;
 let sectionHideObserver = null;
 let _scrollLocked = true;   // true while modal is closed; blocks QC scroll entirely
+let _origScrollIntoView = null;
 
 // Selectors for the specific children of <section.relative> to hide.
 // The section also contains the total/discount/payment rows below — those stay visible.
@@ -167,12 +168,14 @@ function hideOriginalSection() {
     section.setAttribute('inert', '');
 
     // Prevent Bask/Stripe from auto-scrolling to elements inside the hidden section.
-    // inert blocks focus-triggered scroll; this catches programmatic scrollIntoView calls.
-    const _origSIV = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = function(opt) {
-      if (hiddenSection && hiddenSection.contains(this)) return;
-      _origSIV.call(this, opt);
-    };
+    // Guard against double-wrapping on remount cycles — only patch once.
+    if (!_origScrollIntoView) {
+      _origScrollIntoView = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function(opt) {
+        if (hiddenSection && hiddenSection.contains(this)) return;
+        _origScrollIntoView.call(this, opt);
+      };
+    }
 
     // Block #questionnaire-container from scrolling while the modal is closed.
     // Stripe init sets scrollTop on that container during iframe mounting — intercepting
@@ -227,6 +230,10 @@ function restoreOriginalSection() {
     console.log("[CO] removed hidden ✓");
   }
   hiddenSection = null;
+  if (_origScrollIntoView) {
+    Element.prototype.scrollIntoView = _origScrollIntoView;
+    _origScrollIntoView = null;
+  }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 const page = window.__TZMD__.createPage("checkout", () => unmountCheckoutUI());
@@ -244,6 +251,9 @@ console.log(
 let isMounted = false;
 let plans = [];
 let plansObserver = null;
+// Called by setup() so selectPlan() can clear the Bask-DOM total cache and re-render
+// the summary immediately after a plan change (without waiting for the MutationObserver).
+let onPlanSelect = null;
 
 
 const CHECK =
@@ -301,29 +311,31 @@ function getPlans(cardArr) {
   const monthlyPrice = getPrice(monthlyCard);
 
   // Display order: Monthly → Quarterly → 6 Month → Annual
+  // baskTitle stores the exact Bask DOM title so selectPlan() can find the live card
+  // by title text instead of by array index (DOM order may differ from our display order).
   return [
     {
-      id: "monthly",     baskCard: monthlyCard,   name: "Monthly",
+      id: "monthly",     baskCard: monthlyCard,   baskTitle: "Monthly",    name: "Monthly",
       price: monthlyPrice, badge: null,
       billed: "Billed monthly, cancel anytime",
       selected: isSelected(monthlyCard),
     },
     {
-      id: "quarterly",   baskCard: quarterlyCard, name: "Quarterly",
+      id: "quarterly",   baskCard: quarterlyCard, baskTitle: "Quarterly",  name: "Quarterly",
       price: getPrice(quarterlyCard), badge: "RECOMMENDED", badgeStyle: "green",
       billed: getBilled(getPrice(quarterlyCard), 3),
       save: getSavings(monthlyPrice, getPrice(quarterlyCard)),
       selected: isSelected(quarterlyCard),
     },
     {
-      id: "sixmonth",    baskCard: sixMonthCard,  name: "6 Month",
+      id: "sixmonth",    baskCard: sixMonthCard,  baskTitle: "Six months", name: "6 Month",
       price: getPrice(sixMonthCard), badge: null,
       billed: getBilled(getPrice(sixMonthCard), 6),
       save: getSavings(monthlyPrice, getPrice(sixMonthCard)),
       selected: isSelected(sixMonthCard),
     },
     {
-      id: "twelvemonth", baskCard: yearlyCard,    name: "Annual",
+      id: "twelvemonth", baskCard: yearlyCard,    baskTitle: "Yearly",     name: "Annual",
       price: getPrice(yearlyCard), badge: "BEST VALUE", badgeStyle: "green",
       billed: getBilled(getPrice(yearlyCard), 12),
       save: getSavings(monthlyPrice, getPrice(yearlyCard)),
@@ -441,7 +453,10 @@ padding-top:0 !important;
 .prog-select h2 {text-align: center; font-size: 23px; font-weight: 700; letter-spacing: -.2px; }
 .prog-select p { color: var(--ink); font-size: 12.5px; font-weight: 500; margin-top: 3px; }
 .prog-plans { padding: 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
-.prog-plan-card { position: relative; background: #fff; border: 1px solid #C2C3BF; border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.prog-plan-card { position: relative; background: #fff; border: 1px solid #C2C3BF; border-radius: 10px; padding: 7px 11px; cursor: pointer; transition: border-color .15s ease, background .15s ease, opacity .2s ease; }
+.prog-switching .prog-plan-card:not(.prog-selected) { opacity: 0.45; pointer-events: none; cursor: default; }
+@keyframes tzmd-card-spin { to { transform: rotate(360deg); } }
+.prog-switching .prog-plan-card.prog-selected::after { content: ''; position: absolute; top: 9px; right: 11px; width: 13px; height: 13px; border: 2px solid rgba(61,92,42,0.2); border-top-color: #3D5C2A; border-radius: 50%; animation: tzmd-card-spin 0.7s linear infinite; }
 .prog-plan-card.prog-selected { border-color: var(--prog-green); background: #FBFCF8; }
 .prog-plan-badge { display: inline-flex; align-items: center; gap: 4px; margin-left: 20px; margin-bottom: 4px; font-size: 9px; font-weight: 700; letter-spacing: .3px; line-height: 1; padding: 4px 8px; border-radius: 5px; white-space: nowrap; }
 .prog-plan-badge.prog-green { background: var(--prog-green); color: #fff; }
@@ -566,6 +581,16 @@ margin-left: auto;}
   isMounted = true;
   console.log("[CO] mountCheckoutUI — HTML injected ✓");
 
+  // Update title if patient firstName arrives after mount (Bask populates data progressively)
+  function updatePatientName() {
+    const name = window.baskPatientData?.firstName;
+    const titleEl = container.querySelector('.prog-title');
+    if (titleEl && name) {
+      titleEl.innerHTML = `${name}, choose your<br><span class="prog-g">Semaglutide</span> plan`;
+    }
+  }
+  addListener(window, 'baskPatientDataUpdated', updatePatientName);
+
   const wrap = document.getElementById("prog-plans");
 
   function render() {
@@ -635,34 +660,139 @@ margin-left: auto;}
     addObserver(plansObserver);
   }
 
+  // Gate flag: prevents baskSelectionObserver from reverting our state while
+  // selectPlan() is in the middle of clicking the Bask card and waiting for Bask to settle.
+  let _selectingPlan = false;
+  // Timestamp of when selectPlan() last fired — used to enforce MIN_SWITCH_MS cooldown
+  // so rapid clicks can't sneak through between Bask's fast border-2 confirmation (~300ms)
+  // and the end of its internal API cooldown (~1-2s). Without this, Plan B gets silently
+  // ignored by Bask, and when the 3.5s gate fallback fires, the observer reverts to Plan A.
+  let _switchStartTime = 0;
+  const MIN_SWITCH_MS = 1500;
+
   function selectPlan(id) {
     if (!isMounted) return;
+    // Block rapid clicks — gate is active while Bask processes the previous switch
+    // (JS flag) OR while the visual loading indicator is showing (CSS class).
+    // The CSS pointer-events:none stops browser events; the JS guard is defense-in-depth.
+    if (_selectingPlan || wrap.classList.contains("prog-switching")) {
+      console.log("[CO-DEBUG] selectPlan: blocked — still switching, id:", id);
+      return;
+    }
     const plan = plans.find((p) => p.id === id);
-    if (!plan?.baskCard) { console.warn("[CO] no baskCard for plan:", id); return; }
-    console.log("[CO] selectPlan:", id, "→ clicking Bask card:", getCardTitle(plan.baskCard));
+    if (!plan?.baskCard) { console.warn("[CO-DEBUG] selectPlan: no baskCard for plan:", id); return; }
+
+    const connected = plan.baskCard.isConnected;
+    console.log("[CO-DEBUG] selectPlan:", id,
+      "| baskTitle:", plan.baskTitle,
+      "| baskCard.isConnected:", connected
+    );
+
+    // Pause the selection observer and lock the plan cards visually.
+    // Gate enforces MIN_SWITCH_MS minimum — Bask may confirm border-2 fast (~300ms)
+    // but its internal API cooldown is ~1-2s. Clicking during that gap is silently
+    // ignored by Bask, causing the observer to revert when the 3.5s fallback fires.
+    _selectingPlan = true;
+    _switchStartTime = Date.now();
+    wrap.classList.add("prog-switching");
+    clearTimeout(_selectPlanTimer);
+    _selectPlanTimer = setTimeout(() => {
+      _selectingPlan = false;
+      wrap.classList.remove("prog-switching");
+    }, 3500);
+
     plans.forEach((p) => (p.selected = p.id === id));
     wrap.querySelectorAll(".prog-plan-card").forEach((c) => {
       const on = c.dataset.id === id;
       c.classList.toggle("prog-selected", on);
       c.setAttribute("aria-checked", on);
     });
-    plan.baskCard.click();
-  }
 
-  // Watch each Bask card directly via its stored reference — no index arithmetic.
+    // Live DOM lookup by Bask title — DOM order may differ from our plans array order,
+    // so index-based lookup (plans.indexOf) would click the wrong card.
+    const cardsList = [...document.querySelectorAll("ul.relative.mt-5.flex.flex-col.gap-3 > li")];
+    const liveCard = cardsList.find(li => getCardTitle(li) === plan.baskTitle) ?? null;
+    console.log("[CO-DEBUG] selectPlan: targeting baskTitle:", plan.baskTitle,
+      "| cardsList.length:", cardsList.length,
+      "| liveCard found:", liveCard !== null,
+      "| liveCard.isConnected:", liveCard?.isConnected ?? false
+    );
+
+    const cardToClick = liveCard ?? plan.baskCard;
+    if (!liveCard) console.warn("[CO-DEBUG] selectPlan: no live card — falling back to stored ref");
+
+    // Dispatch full mouse sequence so React/Bask event handlers fire regardless of
+    // whether they listen on pointerdown, mousedown, or click.
+    const opts = { bubbles: true, cancelable: true };
+    cardToClick.dispatchEvent(new PointerEvent("pointerdown", opts));
+    cardToClick.dispatchEvent(new MouseEvent("mousedown",    opts));
+    cardToClick.dispatchEvent(new PointerEvent("pointerup",  opts));
+    cardToClick.dispatchEvent(new MouseEvent("mouseup",      opts));
+    cardToClick.dispatchEvent(new MouseEvent("click",        opts));
+
+    // Clear Bask-DOM total cache immediately so summary shows the new plan's base price
+    // while we wait for the MutationObserver to pick up Bask's updated "Total if prescribed".
+    if (onPlanSelect) {
+      console.log("[CO-DEBUG] selectPlan: calling onPlanSelect to clear stale total + re-render summary");
+      onPlanSelect();
+    } else {
+      console.log("[CO-DEBUG] selectPlan: onPlanSelect not set yet (modal not open)");
+    }
+  }
+  let _selectPlanTimer = null;
+
+  // Watch the live plan list container — title-based lookup avoids stale baskCard refs
+  // that become disconnected when React re-renders <li> elements after a plan change.
   const baskSelectionObserver = new MutationObserver(() => {
-    const selectedPlan = plans.find((p) => p.baskCard?.classList.contains("border-2"));
+    const liveLis = [...document.querySelectorAll("ul.relative.mt-5.flex.flex-col.gap-3 > li")];
+    if (!liveLis.length) return;
+    const selectedLi = liveLis.find(li => li.classList.contains("border-2"));
+    if (!selectedLi) return;
+    const selectedTitle = getCardTitle(selectedLi);
+
+    if (_selectingPlan) {
+      // Bask confirmed our plan (border-2 on the expected card) — but only clear the
+      // gate once MIN_SWITCH_MS has elapsed so Bask's internal API cooldown is done.
+      // Clearing too soon lets a rapid second click slip through and get silently ignored
+      // by Bask; the 3.5s fallback would then revert to whatever Bask has selected.
+      const ourTitle = plans.find(p => p.selected)?.baskTitle;
+      if (ourTitle && selectedTitle === ourTitle) {
+        const elapsed = Date.now() - _switchStartTime;
+        if (elapsed >= MIN_SWITCH_MS) {
+          _selectingPlan = false;
+          clearTimeout(_selectPlanTimer);
+          wrap.classList.remove("prog-switching");
+          console.log("[CO] Bask confirmed selection:", selectedTitle, "— gate cleared (elapsed", elapsed, "ms)");
+        } else {
+          // Re-arm timer for just the remaining cooldown window
+          clearTimeout(_selectPlanTimer);
+          _selectPlanTimer = setTimeout(() => {
+            _selectingPlan = false;
+            wrap.classList.remove("prog-switching");
+          }, MIN_SWITCH_MS - elapsed);
+          console.log("[CO] Bask confirmed selection:", selectedTitle, "— cooldown:", MIN_SWITCH_MS - elapsed, "ms remaining");
+        }
+      }
+      return; // Never revert our state while switching
+    }
+
+    const selectedPlan = plans.find(p => p.baskTitle === selectedTitle);
     if (!selectedPlan) return;
-    const currentId = plans.find((p) => p.selected)?.id;
+    const currentId = plans.find(p => p.selected)?.id;
     if (selectedPlan.id !== currentId) {
       console.log("[CO] Bask selection changed → syncing custom UI to:", selectedPlan.id);
-      plans.forEach((p) => (p.selected = p.id === selectedPlan.id));
+      plans.forEach(p => p.selected = p.id === selectedPlan.id);
       render();
     }
   });
-  plans.forEach((p) => {
-    if (p.baskCard) baskSelectionObserver.observe(p.baskCard, { attributes: true, attributeFilter: ["class"] });
-  });
+  // Watch hiddenSection (section.relative) — stable ancestor that survives ul/li re-renders.
+  // Watching the specific ul is unreliable because Bask may replace it after a plan change.
+  const _selObs_target = hiddenSection || document.querySelector("ul.relative.mt-5.flex.flex-col.gap-3")?.closest("section");
+  if (_selObs_target) {
+    baskSelectionObserver.observe(_selObs_target, {
+      childList: true, subtree: true, attributes: true, attributeFilter: ["class"]
+    });
+  }
   addObserver(baskSelectionObserver);
 
   addListener(wrap, "click", (e) => {
@@ -790,7 +920,14 @@ margin-left: auto;}
       return null;
     }
 
+    let _setupDone = false; // guard against setup() running more than once per mount cycle
     function setup(paySection) {
+      if (_setupDone) {
+        console.warn("[CO] setup() called again in same mount cycle — routing to applyToNewPaySection");
+        applyToNewPaySection(paySection);
+        return;
+      }
+      _setupDone = true;
       if (!paySection.isConnected) {
         logBrokenCompatibility("setup", { problem: "paySection is not connected to the live document", expected: "paySection.isConnected === true", actual: "false" });
         unmountCheckoutUI(); return;
@@ -1030,20 +1167,49 @@ margin-left: auto;}
 
       let baskDiscountedTotal = null;
       let baskOriginalTotal = null;
+      let priceLoading = false;
 
       function renderPlanSummary() {
         const sel = plans.find(p => p.selected) || plans[0];
-        if (!sel) return;
+        if (!sel) { console.log("[CO-DEBUG] renderPlanSummary: no selected plan"); return; }
         const { freq, totalAmt } = getPlanDisplayInfo(sel);
+        console.log("[CO-DEBUG] renderPlanSummary:",
+          "| plan:", sel.id, sel.name,
+          "| priceLoading:", priceLoading,
+          "| baskDiscountedTotal:", baskDiscountedTotal,
+          "| baskOriginalTotal:", baskOriginalTotal,
+          "| fallback totalAmt:", totalAmt
+        );
         summaryEl.querySelector('.tzmd-ps-name').textContent = 'Semaglutide — ' + sel.name + ' plan';
         summaryEl.querySelector('.tzmd-ps-freq').textContent = freq;
         const amtEl = summaryEl.querySelector('.tzmd-ps-amt');
-        if (baskDiscountedTotal && baskOriginalTotal) {
+        if (priceLoading) {
+          amtEl.innerHTML = '<span class="tzmd-skel" style="display:inline-block;width:80px;height:22px;border-radius:6px;vertical-align:middle;"></span>';
+        } else if (baskDiscountedTotal && baskOriginalTotal) {
           amtEl.innerHTML = `<span class="tzmd-ps-amt-orig">${baskOriginalTotal}</span> ${baskDiscountedTotal}`;
         } else {
           amtEl.textContent = baskDiscountedTotal || totalAmt;
         }
+        console.log("[CO-DEBUG] renderPlanSummary: DOM updated ✓ price shown:", amtEl.textContent.trim());
       }
+
+      // Expose to selectPlan() so plan-change shows skeleton while waiting for Bask DOM update
+      onPlanSelect = () => {
+        console.log("[CO-DEBUG] onPlanSelect: clearing totals, showing price skeleton");
+        baskDiscountedTotal = null;
+        baskOriginalTotal = null;
+        priceLoading = true;
+        renderPlanSummary();
+        // Safety timeout: if Bask never fires the DOM update, fall back to the plan's base price
+        setTimeout(() => {
+          if (priceLoading) {
+            console.log("[CO-DEBUG] onPlanSelect: price timeout — showing fallback price");
+            priceLoading = false;
+            renderPlanSummary();
+          }
+        }, 4000);
+      };
+
       renderPlanSummary();
 
       // Green reassurance card
@@ -1061,28 +1227,60 @@ margin-left: auto;}
       // Hide Bask's standalone "Total if prescribed" row — our summary replaces it.
       // Queries paySection directly since paySection was NOT moved into modalInner.
       function hideBaskTotal() {
+        // Skip if Bask's current selection doesn't match our selected plan —
+        // this is a stale price from a plan the user just switched away from.
+        // Without this guard, rapid clicks cause "Plan B name + Plan A price" flashes.
+        if (_selectingPlan) {
+          const baskLis = [...document.querySelectorAll("ul.relative.mt-5.flex.flex-col.gap-3 > li")];
+          const baskSel = baskLis.find(li => li.classList.contains("border-2"));
+          const baskSelTitle = baskSel ? getCardTitle(baskSel) : null;
+          const ourSel = plans.find(p => p.selected);
+          if (baskSelTitle && ourSel && baskSelTitle !== ourSel.baskTitle) {
+            console.log("[CO-DEBUG] hideBaskTotal: skipping stale price — Bask on", baskSelTitle, "but ours is", ourSel.baskTitle);
+            return;
+          }
+        }
         const ps = payRef.current;
+        let foundLabel = false;
         for (const el of ps.querySelectorAll('span.font-brand-header, span')) {
           if (!el.children.length && el.textContent.trim() === 'Total if prescribed') {
+            foundLabel = true;
             let row = el;
             for (let i = 0; i < 2 && row.parentElement && row.parentElement !== ps; i++) row = row.parentElement;
             if (row !== el) {
               const priceEls = [...row.querySelectorAll('span')].filter(s =>
                 !s.children.length && /^\$[\d,]+\.\d{2}$/.test(s.textContent.trim())
               );
+              console.log("[CO-DEBUG] hideBaskTotal: found label, priceEls:", priceEls.map(s => s.textContent.trim()));
               if (priceEls.length) {
                 const latest = priceEls[priceEls.length - 1].textContent.trim();
                 const original = priceEls.length > 1 ? priceEls[0].textContent.trim() : null;
-                if (latest !== baskDiscountedTotal || original !== baskOriginalTotal) {
+                console.log("[CO-DEBUG] hideBaskTotal: latest:", latest, "| original:", original,
+                  "| changed:", latest !== baskDiscountedTotal || original !== baskOriginalTotal
+                );
+                if (latest !== baskDiscountedTotal || original !== baskOriginalTotal || priceLoading) {
+                  priceLoading = false;
                   baskDiscountedTotal = latest;
                   baskOriginalTotal = original;
                   renderPlanSummary();
+                  // Price is now correct — lift the visual plan-card lock if gate already cleared.
+                  // Covers the gap between Bask's fast border-2 confirmation and the price DOM update.
+                  if (!_selectingPlan && wrap.classList.contains("prog-switching")) {
+                    wrap.classList.remove("prog-switching");
+                    clearTimeout(_selectPlanTimer);
+                    console.log("[CO-DEBUG] hideBaskTotal: prog-switching cleared after price resolved");
+                  }
                 }
               }
               row.style.setProperty('display', 'none', 'important');
+            } else {
+              console.log("[CO-DEBUG] hideBaskTotal: label found but row === el (couldn't walk up to price container)");
             }
             return;
           }
+        }
+        if (!foundLabel) {
+          console.log("[CO-DEBUG] hideBaskTotal: 'Total if prescribed' label NOT found in paySection");
         }
       }
       hideBaskTotal();
@@ -1224,7 +1422,21 @@ margin-left: auto;}
       // after significant re-renders like actual discount removal confirmation.
       // reinjectionObs only watches children — this observer watches the parent so
       // we detect when paySection is removed and re-graft onto the new SECTION.
+      // Tracks the last element we fully applied to — prevents payReplaceObs and
+      // waitForReplace from both calling applyToNewPaySection for the same newPay
+      // when Bask's discount-removal emits two overlapping DOM mutations.
+      let _lastAppliedPay = null;
+
       function applyToNewPaySection(newPay) {
+        // Dedup: if already applied to this exact element this cycle, skip.
+        // Prevents double-call when payReplaceObs fires AND waitForReplace fires
+        // for the same Bask re-mount event.
+        if (newPay === _lastAppliedPay) {
+          console.log("[CO] applyToNewPaySection: skipping dup call for same element");
+          return;
+        }
+        _lastAppliedPay = newPay;
+
         // Guard: after Bask's discount-removal remount, findPaymentSection() may walk up
         // too far and return the outer section.relative (hiddenSection) instead of the
         // focused payment-form wrapper. Injecting into the outer section would make the
@@ -1276,6 +1488,7 @@ margin-left: auto;}
         // update it again once Bask renders the new total row in the fresh SECTION.
         baskDiscountedTotal = null;
         baskOriginalTotal = null;
+        priceLoading = false; // remount is not a plan-change — don't show skeleton
         renderPlanSummary();
         totalHideObs.disconnect();
         totalHideObs.observe(newPay, { childList: true, subtree: true });
@@ -1300,6 +1513,10 @@ margin-left: auto;}
           // Show skeleton and wait — covers both discount-removal (Bask remounts the section)
           // and SPA navigation after payment (no new section will appear).
           // A 5s fallback closes the modal if no payment section reappears.
+          // IMPORTANT: disconnect payReplaceObs while waitForReplace is live — otherwise
+          // when Bask finally inserts newPay, payReplaceObs fires too and both call
+          // applyToNewPaySection for the same element, causing element duplication.
+          payReplaceObs.disconnect();
           loadingShell.classList.add("tzmd-ls-open");
           let _replaceTimer = null;
           const waitForReplace = new MutationObserver(() => {
@@ -1310,6 +1527,7 @@ margin-left: auto;}
               clearTimeout(_replaceTimer);
               loadingShell.classList.remove("tzmd-ls-open");
               applyToNewPaySection(ps);
+              // applyToNewPaySection re-arms payReplaceObs at its end; no need to do it here
             }
           });
           waitForReplace.observe(document.body, { childList: true, subtree: true });
@@ -1368,6 +1586,7 @@ function unmountCheckoutUI() {
   container.innerHTML = "";
   isMounted = false;
   plans = [];
+  onPlanSelect = null;
 
   if (plansObserver) {
     plansObserver.disconnect();
@@ -1410,15 +1629,15 @@ function debouncedSync() {
     unmountCheckoutUI();
     return;
   }
-  // Hide immediately to prevent flash — full mount is debounced below (gated users only)
+  // Hide immediately to prevent flash — full mount is debounced below
   if (isCheckoutPage()) hideOriginalSection();
-  // Debounce mount only, to avoid thrashing during React's initial render
-  // clearTimeout(syncTimer);
-  // syncTimer = setTimeout(() => {
+  // Debounce mount to avoid thrashing during React's initial render
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
     const currentPage = window.__TZMD__?.activePage;
     if (currentPage !== "checkout") return;
     syncCheckoutUI();
-  // }, 150);
+  }, 150);
 }
 
 console.log("[CO] running initial syncCheckoutUI");

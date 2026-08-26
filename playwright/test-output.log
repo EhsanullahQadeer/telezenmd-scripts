@@ -1,0 +1,197 @@
+[2026-08-25T23:27:51.992Z] Full E2E test started
+
+✓ localhost:4321 ready
+
+→ Navigating to questionnaire...
+✓ Page loaded
+→ Auto-advancing through questionnaire (60s max)...
+  [BROWSER] [CO] script start — activePage: null
+  [BROWSER] [CO] createPage success — activePage: checkout
+  [BROWSER] [CO] running initial syncCheckoutUI
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: false activePage: checkout isMounted: false
+  [BROWSER] [CO] unmountCheckoutUI — isMounted: false activePage: checkout
+  [BROWSER] [CO] unmount — clearing container
+  [BROWSER] [CO] unmount complete
+  [BROWSER] [CO] script fully initialized ✓ activePage: checkout
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: false activePage: checkout isMounted: false
+  [BROWSER] [CO] unmountCheckoutUI — isMounted: false activePage: checkout
+  [BROWSER] [CO] unmount — clearing container
+  [BROWSER] [CO] unmount complete
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: false activePage: checkout isMounted: false
+  [BROWSER] [CO] unmountCheckoutUI — isMounted: false activePage: checkout
+  [BROWSER] [CO] unmount — clearing container
+  [BROWSER] [CO] unmount complete
+  [BROWSER] [CO] bask section children hidden ✓
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: false
+  [BROWSER] [CO] mountCheckoutUI — isMounted: false activePage: checkout
+  [BROWSER] [CO] mountCheckoutUI — HTML injected ✓
+  [BROWSER] [CO] initializePlans — cards found: 4
+  [BROWSER] [CO] card titles: [Quarterly, Six months, Yearly, Monthly]
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+
+→ Waiting for checkout plan cards (up to 5 min)...
+✓ Checkout UI mounted
+     (waiting 1500ms — let Bask settle)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+
+────────────────────────────────────────────────────────────
+  TEST 1 — Bask DOM card order vs our plan array
+────────────────────────────────────────────────────────────
+  Bask DOM order: [0]Quarterly  [1]Six months  [2]Yearly  [3]Monthly
+  Our plan order: [monthly]Monthly  [quarterly]Quarterly  [sixmonth]6 Month  [twelvemonth]Annual
+  ✓  All 4 expected Bask plan titles found in DOM
+  ✓  Custom UI shows 4 plan cards
+
+────────────────────────────────────────────────────────────
+  TEST 2 — Plan click mapping (click each custom card → verify Bask card)
+────────────────────────────────────────────────────────────
+  [BROWSER] [CO] Bask confirmed selection: Monthly — gate cleared early
+  ✓  Click "Monthly" → Bask selected "Monthly"
+  ✓    Custom card "Monthly" has prog-selected class
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] Bask confirmed selection: Quarterly — gate cleared early
+  ✓  Click "Quarterly" → Bask selected "Quarterly"
+  ✓    Custom card "Quarterly" has prog-selected class
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] Bask confirmed selection: Six months — gate cleared early
+  ✓  Click "6 Month" → Bask selected "Six months"
+  ✓    Custom card "6 Month" has prog-selected class
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] Bask confirmed selection: Yearly — gate cleared early
+  ✓  Click "Annual" → Bask selected "Yearly"
+  ✓    Custom card "Annual" has prog-selected class
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+
+────────────────────────────────────────────────────────────
+  TEST 3 — Open payment modal
+────────────────────────────────────────────────────────────
+  [BROWSER] [CO] Bask confirmed selection: Monthly — gate cleared early
+     (waiting 800ms — select monthly)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  ✓  Payment button (#tzmd-pay-btn) found
+     (waiting 1200ms — wait for modal to open)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  ✓  Modal overlay opened (tzmd-open class set)
+  ✓  Payment sheet is position:fixed and visible
+
+────────────────────────────────────────────────────────────
+  TEST 4 — Plan summary card content
+────────────────────────────────────────────────────────────
+  Summary: name="Semaglutide — Monthly plan" freq="Billed monthly, cancel anytime" price="$168.00 $151.20"
+  ✓  Plan name shows "Monthly": "Semaglutide — Monthly plan"
+  ✓  Price shown: "$168.00 $151.20"
+  ✓  Stripe #payment-element is visible inside modal
+  ✓  Submit button found: "Continue to Doctor Review"
+
+────────────────────────────────────────────────────────────
+  TEST 5 — Change plan while modal is open
+────────────────────────────────────────────────────────────
+  ✓  Change plan button found inside modal
+     (waiting 800ms — modal close via change-plan)
+  ✓  Modal closed after clicking Change plan
+  [BROWSER] [CO] Bask confirmed selection: Quarterly — gate cleared early
+     (waiting 800ms — select quarterly)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  ✓  Quarterly plan now selected in custom UI
+     (waiting 1200ms — re-open modal)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  Summary after plan change: name="Semaglutide — Quarterly plan" price="$448.00 $403.20"
+  ✓  Plan name updated to Quarterly: "Semaglutide — Quarterly plan"
+  ✓  Price shown after plan change: "$448.00 $403.20"
+
+────────────────────────────────────────────────────────────
+  TEST 6 — Close modal via X button and overlay click
+────────────────────────────────────────────────────────────
+     (waiting 600ms — close via X)
+  ✓  Modal closed via X button
+     (waiting 800ms — re-open for overlay test)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+     (waiting 600ms — close via overlay)
+  ✓  Modal closed by clicking backdrop overlay
+
+────────────────────────────────────────────────────────────
+  TEST 7 — Price skeleton on plan change
+────────────────────────────────────────────────────────────
+  [BROWSER] [CO] Bask confirmed selection: Yearly — gate cleared early
+     (waiting 600ms — select annual)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+     (waiting 1000ms — open modal on annual)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+     (waiting 400ms — close modal)
+  [BROWSER] [CO] Bask confirmed selection: Monthly — gate cleared early
+     (waiting 200ms — just after plan click — re-open modal to check skeleton)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+     (waiting 200ms — just after modal open — check for skeleton)
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
+  ⚠  Skeleton not caught (may have resolved too fast — not a hard failure)
+     (waiting 2500ms — wait for price to resolve)
+  ✓  Price resolved after plan change: "$168.00 $151.20"
+
+────────────────────────────────────────────────────────────
+  TEST 8 — Sticky bar and trust badges
+────────────────────────────────────────────────────────────
+  ✓  Sticky bar (#tzmd-sticky-bar) present
+  ✓  Trust box (.co-trust) present
+  ✓  FSA box (.prog-fsa-box) present
+
+════════════════════════════════════════════════════════════
+  RESULTS:  28 passed  /  0 failed  /  28 total
+════════════════════════════════════════════════════════════
+  🎉  ALL TESTS PASSED
+
+Keeping browser open. Close to exit.
+
+  [BROWSER] [CO] syncCheckoutUI — isCheckoutPage: true activePage: checkout isMounted: true
+  [BROWSER] [CO] mountCheckoutUI — isMounted: true activePage: checkout
+  [BROWSER] [CO] already mounted, skip
