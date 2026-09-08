@@ -236,6 +236,8 @@ function restoreOriginalSection() {
   }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
+const SCRIPT_VERSION = '1.2.0';
+window.__TZMD_VERSION__ = SCRIPT_VERSION;
 // ── Drug name — uncomment the one you need, comment the other ─────────────────
 var DRUG_NAME = 'Semaglutide';
 // var DRUG_NAME = 'Tirzepatide';
