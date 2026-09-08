@@ -276,9 +276,9 @@ function findCardByTitle(cardArr, title) {
 }
 
 function getPrice(card) {
-  const text =
-    card?.querySelector(":scope > div:first-child span:last-child")
-      ?.textContent || "";
+  const spans = [...(card?.querySelectorAll(":scope > div:first-child span") || [])];
+  const priceSpan = spans.find(s => /^\$[\d,]+\.?\d*$/.test(s.textContent.trim()));
+  const text = priceSpan?.textContent ?? spans[spans.length - 1]?.textContent ?? "";
   return parseFloat(text.replace(/[^0-9.]/g, ""));
 }
 function formatCurrency(amount) {
