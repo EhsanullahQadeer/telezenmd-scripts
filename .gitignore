@@ -1,4 +1,10 @@
-node_modules/
-playwright/auth/session.json
-playwright/auth/checkout-snapshot.json
-playwright/auth/user-data/
+# Ignore everything
+*
+
+# Un-ignore the checkout folder
+!custom-js/
+!custom-js/checkout/
+!custom-js/checkout/**
+
+# Un-ignore .gitignore itself
+!.gitignore
