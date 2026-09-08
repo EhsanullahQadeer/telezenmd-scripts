@@ -236,16 +236,18 @@ function restoreOriginalSection() {
   }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const page = window.__TZMD__.createPage("checkout", () => unmountCheckoutUI());
+// ── Drug name — uncomment the one you need, comment the other ─────────────────
+var DRUG_NAME = 'Semaglutide';
+// var DRUG_NAME = 'Tirzepatide';
+// ─────────────────────────────────────────────────────────────────────────────
+const page = window.__TZMD__.createPage("checkout-" + DRUG_NAME.toLowerCase(), () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
   return;
 }
 const { addObserver, addTimer, addListener, destroy } = page;
-console.log(
-  "[CO] createPage success — activePage:",
-  window.__TZMD__.activePage,
-);
+
+console.log("[CO] createPage success — activePage:", window.__TZMD__.activePage, "| drug:", DRUG_NAME);
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let isMounted = false;
@@ -544,7 +546,7 @@ margin-left: auto;}
 </style>
 <div class="prog-checkout relative flex w-full shrink-0 flex-grow flex-col co">
   <div class="prog-head">
-    <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">Semaglutide</span> plan</h1>
+    <h1 class="prog-title">${window.baskPatientData?.firstName || ''}, choose your<br><span class="prog-g">${DRUG_NAME}</span> plan</h1>
   </div>
   <div class="prog-plans" id="prog-plans"></div>
 
@@ -586,7 +588,7 @@ margin-left: auto;}
     const name = window.baskPatientData?.firstName;
     const titleEl = container.querySelector('.prog-title');
     if (titleEl && name) {
-      titleEl.innerHTML = `${name}, choose your<br><span class="prog-g">Semaglutide</span> plan`;
+      titleEl.innerHTML = `${name}, choose your<br><span class="prog-g">${DRUG_NAME}</span> plan`;
     }
   }
   addListener(window, 'baskPatientDataUpdated', updatePatientName);
@@ -1180,7 +1182,7 @@ margin-left: auto;}
           "| baskOriginalTotal:", baskOriginalTotal,
           "| fallback totalAmt:", totalAmt
         );
-        summaryEl.querySelector('.tzmd-ps-name').textContent = 'Semaglutide — ' + sel.name + ' plan';
+        summaryEl.querySelector('.tzmd-ps-name').textContent = DRUG_NAME + ' — ' + sel.name + ' plan';
         summaryEl.querySelector('.tzmd-ps-freq').textContent = freq;
         const amtEl = summaryEl.querySelector('.tzmd-ps-amt');
         if (priceLoading) {
@@ -1635,7 +1637,7 @@ function debouncedSync() {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     const currentPage = window.__TZMD__?.activePage;
-    if (currentPage !== "checkout") return;
+    if (currentPage !== "checkout-" + DRUG_NAME.toLowerCase()) return;
     syncCheckoutUI();
   }, 150);
 }

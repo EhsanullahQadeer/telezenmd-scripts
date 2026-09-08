@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "build": "node custom-js/checkout/build.js",
     "save-session": "node playwright/save-session.js",
     "save-checkout": "node playwright/save-checkout-session.js",
     "test:checkout": "npx playwright test playwright/tests/checkout.spec.js --headed",
