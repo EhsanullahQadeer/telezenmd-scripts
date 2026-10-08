@@ -236,15 +236,15 @@ function restoreOriginalSection() {
   }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const SCRIPT_VERSION = '1.3.0';
+const SCRIPT_VERSION = '1.3.1';
 window.__TZMD_VERSION__ = SCRIPT_VERSION;
 // ── Drug name — uncomment the one you need, comment the other ─────────────────
 var DRUG_NAME = 'Semaglutide';
 // var DRUG_NAME = 'Tirzepatide';
 // ─────────────────────────────────────────────────────────────────────────────
-// Bask plan titles to show, in Bask DOM-title form. Add "Six months" / "Yearly"
-// back here to re-enable those plans (definitions still live in getPlans()).
-const ENABLED_PLAN_TITLES = ["Monthly", "Quarterly"];
+// Bask plan titles to show, in Bask DOM-title form, in display order. Add "Six months" /
+// "Yearly" back here to re-enable those plans (definitions still live in getPlans()).
+const ENABLED_PLAN_TITLES = ["Quarterly", "Monthly"];
 const page = window.__TZMD__.createPage("checkout-" + DRUG_NAME.toLowerCase(), () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
@@ -317,7 +317,7 @@ function getPlans(cardArr) {
 
   const monthlyPrice = getPrice(monthlyCard);
 
-  // Display order: Monthly → Quarterly → 6 Month → Annual
+  // Display order follows ENABLED_PLAN_TITLES (sorted below).
   // baskTitle stores the exact Bask DOM title so selectPlan() can find the live card
   // by title text instead of by array index (DOM order may differ from our display order).
   return [
@@ -348,7 +348,8 @@ function getPlans(cardArr) {
       save: getSavings(monthlyPrice, getPrice(yearlyCard)),
       selected: isSelected(yearlyCard),
     },
-  ].filter(p => ENABLED_PLAN_TITLES.includes(p.baskTitle));
+  ].filter(p => ENABLED_PLAN_TITLES.includes(p.baskTitle))
+   .sort((a, b) => ENABLED_PLAN_TITLES.indexOf(a.baskTitle) - ENABLED_PLAN_TITLES.indexOf(b.baskTitle));
 }
 function planHTML(p) {
   const badge = p.badge ? `<span class="prog-plan-badge prog-${p.badgeStyle}">${p.badge}</span>` : "";
