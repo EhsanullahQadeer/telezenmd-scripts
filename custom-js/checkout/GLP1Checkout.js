@@ -236,12 +236,15 @@ function restoreOriginalSection() {
   }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const SCRIPT_VERSION = '1.2.0';
+const SCRIPT_VERSION = '1.3.0';
 window.__TZMD_VERSION__ = SCRIPT_VERSION;
 // ── Drug name — uncomment the one you need, comment the other ─────────────────
 var DRUG_NAME = 'Semaglutide';
 // var DRUG_NAME = 'Tirzepatide';
 // ─────────────────────────────────────────────────────────────────────────────
+// Bask plan titles to show, in Bask DOM-title form. Add "Six months" / "Yearly"
+// back here to re-enable those plans (definitions still live in getPlans()).
+const ENABLED_PLAN_TITLES = ["Monthly", "Quarterly"];
 const page = window.__TZMD__.createPage("checkout-" + DRUG_NAME.toLowerCase(), () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
@@ -345,7 +348,7 @@ function getPlans(cardArr) {
       save: getSavings(monthlyPrice, getPrice(yearlyCard)),
       selected: isSelected(yearlyCard),
     },
-  ];
+  ].filter(p => ENABLED_PLAN_TITLES.includes(p.baskTitle));
 }
 function planHTML(p) {
   const badge = p.badge ? `<span class="prog-plan-badge prog-${p.badgeStyle}">${p.badge}</span>` : "";
@@ -616,11 +619,11 @@ margin-left: auto;}
       "ul.relative.mt-5.flex.flex-col.gap-3 > li",
     );
     console.log("[CO] initializePlans — cards found:", cardsList.length);
-    if (cardsList.length < 4) return false; // not ready yet — observer will retry
+    if (cardsList.length < ENABLED_PLAN_TITLES.length) return false; // not ready yet — observer will retry
     const cardArr = [...cardsList];
     const foundTitles = cardArr.map(getCardTitle);
     console.log("[CO] card titles:", foundTitles);
-    const required = ["Monthly", "Quarterly", "Six months", "Yearly"];
+    const required = ENABLED_PLAN_TITLES;
     const missing  = required.filter(n => !foundTitles.includes(n));
     if (missing.length) {
       logBrokenCompatibility("initializePlans", {
