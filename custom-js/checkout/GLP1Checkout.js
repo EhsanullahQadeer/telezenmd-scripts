@@ -236,7 +236,7 @@ function restoreOriginalSection() {
   }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const SCRIPT_VERSION = '1.3.1';
+const SCRIPT_VERSION = '1.4.0';
 window.__TZMD_VERSION__ = SCRIPT_VERSION;
 // ── Drug name — uncomment the one you need, comment the other ─────────────────
 var DRUG_NAME = 'Semaglutide';
@@ -244,7 +244,7 @@ var DRUG_NAME = 'Semaglutide';
 // ─────────────────────────────────────────────────────────────────────────────
 // Bask plan titles to show, in Bask DOM-title form, in display order. Add "Six months" /
 // "Yearly" back here to re-enable those plans (definitions still live in getPlans()).
-const ENABLED_PLAN_TITLES = ["Quarterly", "Monthly"];
+const ENABLED_PLAN_TITLES = ["Quarterly", "Monthly", "Six months", "Yearly"];
 const page = window.__TZMD__.createPage("checkout-" + DRUG_NAME.toLowerCase(), () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
