@@ -236,15 +236,15 @@ function restoreOriginalSection() {
   }
 }
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-const SCRIPT_VERSION = '1.4.0';
+const SCRIPT_VERSION = '1.5.0';
 window.__TZMD_VERSION__ = SCRIPT_VERSION;
 // ── Drug name — uncomment the one you need, comment the other ─────────────────
 var DRUG_NAME = 'Semaglutide';
 // var DRUG_NAME = 'Tirzepatide';
 // ─────────────────────────────────────────────────────────────────────────────
-// Bask plan titles to show, in Bask DOM-title form, in display order. Add "Six months" /
-// "Yearly" back here to re-enable those plans (definitions still live in getPlans()).
-const ENABLED_PLAN_TITLES = ["Quarterly", "Monthly", "Six months", "Yearly"];
+// Bask plan titles this script knows how to render (definitions live in getPlans()).
+// Which plans show, and in what order, follows Bask's own card list.
+const KNOWN_PLAN_TITLES = ["Monthly", "Quarterly", "Six months", "Yearly"];
 const page = window.__TZMD__.createPage("checkout-" + DRUG_NAME.toLowerCase(), () => unmountCheckoutUI());
 if (!page) {
   console.log("[CO] already active or bailing");
@@ -316,8 +316,10 @@ function getPlans(cardArr) {
   const yearlyCard    = findCardByTitle(cardArr, "Yearly");
 
   const monthlyPrice = getPrice(monthlyCard);
+  // Savings are relative to Monthly — skip them if Bask isn't offering Monthly.
+  const savings = (price) => monthlyCard ? getSavings(monthlyPrice, price) : null;
 
-  // Display order follows ENABLED_PLAN_TITLES (sorted below).
+  // Only plans Bask currently shows, in Bask's DOM order (sorted below).
   // baskTitle stores the exact Bask DOM title so selectPlan() can find the live card
   // by title text instead of by array index (DOM order may differ from our display order).
   return [
@@ -331,25 +333,25 @@ function getPlans(cardArr) {
       id: "quarterly",   baskCard: quarterlyCard, baskTitle: "Quarterly",  name: "Quarterly",
       price: getPrice(quarterlyCard), badge: "RECOMMENDED", badgeStyle: "green",
       billed: getBilled(getPrice(quarterlyCard), 3),
-      save: getSavings(monthlyPrice, getPrice(quarterlyCard)),
+      save: savings(getPrice(quarterlyCard)),
       selected: isSelected(quarterlyCard),
     },
     {
       id: "sixmonth",    baskCard: sixMonthCard,  baskTitle: "Six months", name: "6 Month",
       price: getPrice(sixMonthCard), badge: null,
       billed: getBilled(getPrice(sixMonthCard), 6),
-      save: getSavings(monthlyPrice, getPrice(sixMonthCard)),
+      save: savings(getPrice(sixMonthCard)),
       selected: isSelected(sixMonthCard),
     },
     {
       id: "twelvemonth", baskCard: yearlyCard,    baskTitle: "Yearly",     name: "Annual",
       price: getPrice(yearlyCard), badge: "BEST VALUE", badgeStyle: "green",
       billed: getBilled(getPrice(yearlyCard), 12),
-      save: getSavings(monthlyPrice, getPrice(yearlyCard)),
+      save: savings(getPrice(yearlyCard)),
       selected: isSelected(yearlyCard),
     },
-  ].filter(p => ENABLED_PLAN_TITLES.includes(p.baskTitle))
-   .sort((a, b) => ENABLED_PLAN_TITLES.indexOf(a.baskTitle) - ENABLED_PLAN_TITLES.indexOf(b.baskTitle));
+  ].filter(p => p.baskCard)
+   .sort((a, b) => cardArr.indexOf(a.baskCard) - cardArr.indexOf(b.baskCard));
 }
 function planHTML(p) {
   const badge = p.badge ? `<span class="prog-plan-badge prog-${p.badgeStyle}">${p.badge}</span>` : "";
@@ -620,17 +622,18 @@ margin-left: auto;}
       "ul.relative.mt-5.flex.flex-col.gap-3 > li",
     );
     console.log("[CO] initializePlans — cards found:", cardsList.length);
-    if (cardsList.length < ENABLED_PLAN_TITLES.length) return false; // not ready yet — observer will retry
+    if (cardsList.length === 0) return false; // not ready yet — observer will retry
     const cardArr = [...cardsList];
     const foundTitles = cardArr.map(getCardTitle);
     console.log("[CO] card titles:", foundTitles);
-    const required = ENABLED_PLAN_TITLES;
-    const missing  = required.filter(n => !foundTitles.includes(n));
-    if (missing.length) {
+    // An unrecognized title means a new or renamed plan we can't render — fall back to
+    // Bask's native checkout rather than silently hiding a plan.
+    const unknown = foundTitles.filter(n => !KNOWN_PLAN_TITLES.includes(n));
+    if (unknown.length) {
       logBrokenCompatibility("initializePlans", {
-        problem: "Required Bask plan card titles are missing or changed",
-        expected: required.join(", "),
-        actual: foundTitles.join(", ") || "(none found)"
+        problem: "Unrecognized Bask plan card titles",
+        expected: "Any of: " + KNOWN_PLAN_TITLES.join(", "),
+        actual: foundTitles.join(", ")
       });
       return 'abort';
     }
